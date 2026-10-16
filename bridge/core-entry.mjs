@@ -5,6 +5,5 @@ export {reconcilePublications,publicationFolder,publicationDeadline,realDay} fro
 export {syncTeaching,readLearning} from '../../lib/language-learning.mjs';
 export {createTopicResearcher} from '../../lib/topic-research.mjs';
 export {albumFromWorld} from '../../lib/album.mjs';
-export {withZhuyin} from '../../lib/zhuyin.mjs';
 export {validateDailyWriting,digest,writingContent,writingMode} from '../../lib/daily-writing.mjs';
 export {hydrate,changes,readFileSync,writeFileSync} from './fs.mjs';
