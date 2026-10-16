@@ -1,6 +1,7 @@
 import {env} from 'cloudflare:workers';
 import {createHash} from 'node:crypto';
 import * as core from './core.mjs';
+import {advanceCloud} from '../bridge/advance.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const root='/hunem/data',json=(x:any)=>JSON.stringify(x);
 export const binaryHash=(x:any)=>createHash('sha256').update(x).digest('hex');
@@ -15,11 +16,7 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true){
    const body=await bucket().get(JSON.parse(row.value).key);if(!body)throw Error('世界快照遺失，禁止建立新世界');
    const p=await body.json<any>();core.hydrate(p.files||{});
    process.env.GOOGLE_MAPS_API_KEY=String((env as any).GOOGLE_MAPS_API_KEY||'');process.env.GOOGLE_MAPS_BROWSER_KEY=String((env as any).GOOGLE_MAPS_BROWSER_KEY||'');
-   if(advance){const real=Date.now(),s=p.world,target=s.now+Math.max(0,real-s.realAt)*s.speed;
-    await core.tick(s,target,async(job:any)=>{const key=`${job.from}-${job.to}-${job.originPosition?.join(',')||'city'}-cloud-v2`;if(p.routes[key]?.verified)return p.routes[key];const route=await core.getRoute(job);if(route.verified)p.routes[key]=route;return route;});
-    s.realAt=s.speed?real-(target-s.now)/s.speed:real;
-    core.reconcilePublications(s,root,real);core.syncTeaching(s.diaries);
-   }
+   if(advance)await advanceCloud(p,core);
    const result=await fn(p);if(!advance)return result;Object.assign(p.files,core.changes());
    for(const key of Object.keys(p.files))if(key.endsWith('.tmp'))delete p.files[key];
    const revision=row.revision+1,key=`snapshots/${String(revision).padStart(10,'0')}-${lease}.json`,bytes=json(p);
