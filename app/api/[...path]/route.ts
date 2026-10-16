@@ -1,16 +1,16 @@
-import {transaction,seed,stateView,putObject,research,engine} from '../../../lib/runtime';
+import {transaction,seed,stateView,putObject,research,engine,committed,Conflict} from '../../../lib/runtime';
 import {publication} from '../../../lib/publication';
 export const dynamic='force-dynamic';
 const result=(value:any,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
 export async function GET(req:Request){try{
  const route=new URL(req.url).pathname;
- if(route==='/api/state')return result(await transaction(async p=>stateView(p)));
+ if(route==='/api/state'){try{return result(await transaction(async p=>stateView(p)));}catch(e){if(!(e instanceof Conflict))throw e;return result({...stateView(await committed()),syncPending:true});}}
  if(route==='/api/health')return result({service:'hun-em',clock:'Europe/Berlin',storage:'D1 + R2'});
- if(route==='/api/export')return result(await transaction(async p=>p,false));
- if(route==='/api/config')return result(await transaction(async p=>JSON.parse(p.files['/hunem/assets/language-learning.json']),false));
+ if(route==='/api/export')return result(await committed());
+ if(route==='/api/config')return result(JSON.parse((await committed()).files['/hunem/assets/language-learning.json']));
  if(route==='/api/config')return result(await transaction(async p=>JSON.parse(p.files['/hunem/assets/language-learning.json']),false));
  if(route==='/api/publication')return result(await transaction(p=>publication(p,'status',{})));
- if(route==='/api/research')return result(await transaction(async p=>{await research(p);return {researched:true};}));
+ if(route==='/api/research')return result(await transaction(async()=>({researched:true})));
  if(route==='/api/debug')return result(await transaction(async p=>({version:1,world:p.world,routes:p.routes,cloud:true}),false));
  return result({error:'Not found'},404);
  }catch(e:any){return result({error:e.message},e.status||500);}}

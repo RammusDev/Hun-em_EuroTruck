@@ -3,7 +3,7 @@ export {cities} from '../../lib/world.mjs';
 export {getRoute} from '../../lib/routing.mjs';
 export {reconcilePublications,publicationFolder,publicationDeadline,realDay} from '../../lib/publication-queue.mjs';
 export {syncTeaching,readLearning} from '../../lib/language-learning.mjs';
-export {createTopicResearcher} from '../../lib/topic-research.mjs';
+export {createTopicResearcher,researchAnchor} from '../../lib/topic-research.mjs';
 export {plannedTopicAnchors,topicPolicy} from '../../lib/local-topics.mjs';
 export {albumFromWorld} from '../../lib/album.mjs';
 export {validateDailyWriting,digest,writingContent,writingMode} from '../../lib/daily-writing.mjs';

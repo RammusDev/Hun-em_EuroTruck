@@ -8,6 +8,7 @@ export const binaryHash=(x:any)=>createHash('sha256').update(x).digest('hex');
 const hash=(x:any)=>binaryHash(Buffer.isBuffer(x)||typeof x==='string'?x:json(x));
 let queue:Promise<any>=Promise.resolve();
 export class Conflict extends Error {status=409;}
+export async function committed(){for(let i=0;i<3;i++){const row=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('world').first<any>();if(!row)throw new Conflict('世界尚未匯入');const body=await bucket().get(JSON.parse(row.value).key);if(body)return body.json<any>();}throw new Conflict('世界版本切換中，請稍後重試');}
 export async function transaction(fn:(p:any)=>Promise<any>,advance=true){
  const run=async()=>{
   const lease=crypto.randomUUID(),now=Date.now(),row=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING *').bind(lease,now+180000,'world',now).first<any>();
