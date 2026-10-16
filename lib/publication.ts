@@ -1,4 +1,4 @@
-import {transaction,getObject,engine,Conflict} from './runtime';
+import {transaction,getObject,engine,Conflict,binaryHash} from './runtime';
 import {env} from 'cloudflare:workers';
 const minute=60000,root='/hunem/data';
 export async function publication(p:any,op:string,x:any){
@@ -28,7 +28,7 @@ export async function publication(p:any,op:string,x:any){
  if(op==='attach'){
   if(!p.cloudWriting?.[job.id])throw Error('必須先完成AI寫作');
   const key=`generated/${job.id}/daily-sketch.png`;if(x.key!==key)throw Error('圖片路徑與工作不符');
-  const obj=await getObject(key);if(!obj)throw Error('新圖片尚未上傳');const bytes=Buffer.from(await obj.arrayBuffer()),hash=engine.digest(bytes);
+  const obj=await getObject(key);if(!obj)throw Error('新圖片尚未上傳');const bytes=Buffer.from(await obj.arrayBuffer()),hash=binaryHash(bytes);
   if(bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a'||bytes.readUInt32BE(16)<128||bytes.readUInt32BE(20)<128)throw Error('圖片必須是完整PNG');
   const prior=await (env.DB as D1Database).prepare('SELECT path FROM hunem_objects WHERE sha256=? AND path<>?').bind(hash,key).first();if(prior)throw Error('不能重用既有圖片');
   const review=x.review;if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||!review.originalGeneratedPath||review.visualReview?.blackFur!==true||review.visualReview?.yellowScarf!==true||review.visualReview?.newComposition!==true||review.sha256!==hash||review.inputSha256!==engine.digest(JSON.stringify(job.input,null,2)))throw Error('缺少真實生圖及角色／新構圖檢查');

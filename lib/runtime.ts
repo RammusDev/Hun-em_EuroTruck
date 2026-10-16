@@ -1,7 +1,10 @@
 import {env} from 'cloudflare:workers';
+import {createHash} from 'node:crypto';
 import * as core from './core.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
-const root='/hunem/data',json=(x:any)=>JSON.stringify(x),hash=core.digest;
+const root='/hunem/data',json=(x:any)=>JSON.stringify(x);
+export const binaryHash=(x:any)=>createHash('sha256').update(x).digest('hex');
+const hash=(x:any)=>binaryHash(Buffer.isBuffer(x)||typeof x==='string'?x:json(x));
 let queue:Promise<any>=Promise.resolve();
 export class Conflict extends Error {status=409;}
 export async function transaction(fn:(p:any)=>Promise<any>,advance=true){
@@ -40,7 +43,7 @@ export async function seed(p:any){
 export function stateView(p:any){return {...core.snapshot(p.world),diaries:p.world.diaries.map(core.withZhuyin),cities:core.cities,album:core.albumFromWorld(p.world,core.cities),googleKey:String((env as any).GOOGLE_MAPS_BROWSER_KEY||''),adminToken:'private-owner',cloud:true};}
 export async function putObject(key:string,bytes:ArrayBuffer){
  if(!/^(illustrations\/[a-z0-9-]+\.png|generated\/hunem-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}\/[a-z0-9-]+\.png|archive\/[a-zA-Z0-9_./-]+)$/.test(key)||key.includes('..'))throw Error('無效物件路徑');
- const digest=hash(Buffer.from(bytes)),old=await db().prepare('SELECT sha256 FROM hunem_objects WHERE path=?').bind(key).first<any>();if(old&&old.sha256!==digest)throw new Conflict('物件已存在且內容不同，禁止覆寫');
+ const digest=hash(Buffer.from(bytes)),old=await db().prepare('SELECT sha256 FROM hunem_objects WHERE path=?').bind(key).first<any>();if(old&&old.sha256!==digest){const existing=await bucket().get(key);if(!existing||binaryHash(Buffer.from(await existing.arrayBuffer()))!==digest)throw new Conflict('物件已存在且內容不同，禁止覆寫');await db().prepare('UPDATE hunem_objects SET sha256=? WHERE path=?').bind(digest,key).run();}
  await bucket().put(key,bytes,{httpMetadata:{contentType:key.endsWith('.png')?'image/png':'application/octet-stream'}});
  await db().prepare('INSERT OR IGNORE INTO hunem_objects(path,sha256,bytes,created_at) VALUES(?,?,?,?)').bind(key,digest,bytes.byteLength,Date.now()).run();return {key,sha256:digest,bytes:bytes.byteLength};
 }
