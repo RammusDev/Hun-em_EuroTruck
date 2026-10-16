@@ -2,7 +2,7 @@
 
 僅此私人正式站。從Sites get_site取得此站服務存取權，僅送到此站的OAI-Sites-Authorization標頭；不得將憑證存檔、輸出或放入排程提示。電腦本機不參與。不要呼叫付費模型API或生圖CLI。
 
-真實Europe/Berlin 23:05開始，同次執行內未完成時每5分鐘檢查，23:30截止；當日日記完成就立即結束，不再輪詢或補圖。GET /api/state先同步真實世界；GET /api/research更新近期住宿周圍題材。POST /api/publication，JSON {"op":"claim"}。只有action=generate才製作，already-published即結束，no-work/busy可等到下一個5分鐘點；最多23:30。若遇blocked或工具／權限障礙，記錄失敗並停止，不繞過權限。
+真實Europe/Berlin 23:05開始，同次執行內未完成時每5分鐘檢查，23:30截止；當日日記完成就立即結束，不再輪詢或補圖，不另設23:30喚起。GET /api/state先同步真實世界；GET /api/research更新近期住宿周圍題材。POST /api/publication，JSON {"op":"claim"}。只有action=generate才製作，already-published即結束，no-work/busy可等到下一個5分鐘點；最多23:30。若遇blocked或工具／權限障礙，記錄失敗並停止製作，不繞過權限；若網站仍可連線，同次等待23:30後GET /api/state觸發截止再結束。實際等級一律依封存input.learningPlan，文件或排程中列出的A2／N3／A1只是目前初始設定。
 
 generate回傳id、lease、input全文、draft及已有writing/image。必須讀完整input、人物設定及近期日記，遵循其中已封存的級數、文法與實際事件。用繁中、英文、日文、德文重寫第一人稱日記，事實與敘事焦點一致，不編造天氣、購物、對話、餐點或入館。Hun-em全黑毛色、黃色圍巾，踏實安靜、有乾幽默，不寫被監看或自我辯解。外語按input.learningPlan目標級數；保留grammarIds，每語grammar一組[文章逐字例句,繁中解析]，動態例句按當篇造句，詞彙3至5個，格式「文中原詞：繁中解釋」。沒有保留文法時grammar為空。draft其餘中繼資料保持原樣。若已有有效writing，直接重用，不重寫。
 
