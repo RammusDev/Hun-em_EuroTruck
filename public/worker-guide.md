@@ -1,17 +1,28 @@
-# Hun-em 雲端每日發布
+# Hun-em 雲端每日發布 v2
 
-僅此私人正式站。從Sites get_site取得此站服務存取權，僅送到此站的OAI-Sites-Authorization標頭；不得將憑證存檔、輸出或放入排程提示。電腦本機不參與。不要呼叫付費模型API或生圖CLI。
+## 認證與固定工具
+只操作本私人正式站，不依賴本機，不使用付費模型API或生圖CLI。Sites get_site的siwc_bypass_bearer_token只送本站的 OAI-Sites-Authorization: Bearer <token>；禁止Authorization、匿名試探、轉址或把憑證放檔案／參數／輸出。遇401/403最多重新get_site一次，仍失敗停止，不猜測。
 
-真實Europe/Berlin 23:05開始，同次執行內未完成時每5分鐘檢查，23:30截止；當日日記完成就立即結束，不再輪詢或補圖，不另設23:30喚起。GET /api/state先同步真實世界；GET /api/research更新近期住宿周圍題材。POST /api/publication，JSON {"op":"claim"}。只有action=generate才製作，already-published即結束，no-work/busy可等到下一個5分鐘點；最多23:30。若遇blocked或工具／權限障礙，記錄失敗並停止製作，不繞過權限；若網站仍可連線，同次等待23:30後GET /api/state觸發截止再結束。實際等級一律依封存input.learningPlan，文件或排程中列出的A2／N3／A1只是目前初始設定。
+用同一正確標頭下載本站 /worker-client.mjs 保存本次環境，再用 node worker-client.mjs、tty:true啟動。它關閉stdin回顯。先經隱藏stdin送 {"token":"當次憑證"}，ready:true後才逐個送JSON命令並等待結果。不要自行重寫curl／連線程式。Ctrl-C或{"cmd":"stop"}關閉。
 
-generate回傳id、lease、input全文、draft及已有writing/image。必須讀完整input、人物設定及近期日記，遵循其中已封存的級數、文法與實際事件。用繁中、英文、日文、德文重寫第一人稱日記，事實與敘事焦點一致，不編造天氣、購物、對話、餐點或入館。Hun-em全黑毛色、黃色圍巾，踏實安靜、有乾幽默，不寫被監看或自我辯解。外語按input.learningPlan目標級數；保留grammarIds，每語grammar一組[文章逐字例句,繁中解析]，動態例句按當篇造句，詞彙3至5個，格式「文中原詞：繁中解釋」。沒有保留文法時grammar為空。draft其餘中繼資料保持原樣。若已有有效writing，直接重用，不重寫。
+## 同步與領取
+{"cmd":"sync"}只回摘要。syncPending=true時繼續sync追上世界，不讀完整/api/state或/api/export。再{"cmd":"claim"}。generate時完整必要素材存hunem-work/input.json，僅印路徑。只完整讀一次此檔；原封存完整保留，AI輸入僅含完整角色、事件、景點背景、當次教材及近期四語參考。不要重複印全文或道路座標。
+已刊立即結束；no-work/busy才等下一個5分鐘點。僅確認舊客戶端已中斷時用{"cmd":"claim","resume":true}續領，禁止平行製作。writingFile存在代表有效AI文章，讀它後直接生圖；imageReady=true則直接發布；candidateFile則讀取未完成候選並局部修正。原始封存雜湊由工具帶入attach，不可對精簡input重算。
 
-完成真實校對後POST /api/publication：{op:"write",id,lease,draft,review}。review需包含firstPerson、characterVoice、factsConsistent、translationsConsistent、levelChecked、grammarExplained、recentDiariesCompared、grammarUsageChecked、vocabularyChecked為true，focus為生活焦點，eventIndices為引用的input.events索引，sourceKeys若有須引用input.writingContext中的來源。提交後必須驗證written=true。
+## 寫作及驗證
+遵循input.character、events、writingContext、recentDiaries、learningPlan及writingPolicy。四語自述日記維持同一天事實與焦點，級數依learningPlan（目前英文A2、日文N3、德語A1）；角色全黑貓黃圍巾、踏實安靜乾幽默。不捏造天氣、購物、對話、餐點或入館；背景不冒充參訪，不寫資料核對或自我辯解。保留深度校對，不為省token犧牲品質。
 
-依完成文章挑真實已發生場景，用imagegen技能及內建image_gen.imagegen實際生成一張全新手繪插圖。先下載、檢視 /illustrations/munich.png 或input指定的既有角色參考；近期畫作也可參考。保持全黑貓黃色圍巾，禁止複製、裁切、鏡像舊圖。若已有有效新圖，直接續發布。生圖後目視檢查角色及新構圖。原始PNG以POST /api/object?key=generated/{id}/daily-sketch.png二進位上傳，讀回sha256。
+保存candidate.json：
+{"draft":{"title":"…","zh":"…","learning":{"en":{"text":"…","grammar":[["文章逐字例句","繁中解析"]],"grammarIds":["指定ID"],"words":["文中原詞：繁中解釋"]},"de":{},"ja":{}}},"review":{}}
+三語都需完整text、grammar、grammarIds及3至5個文中詞彙；無指定文法時grammar空。只提交這些內容欄位，不重建備用稿及中繼資料。真正自我校對後review含firstPerson、characterVoice、factsConsistent、translationsConsistent、levelChecked、grammarExplained、recentDiariesCompared、grammarUsageChecked、vocabularyChecked為true，focus為生活焦點，eventIndices為input.events原索引，sourceKeys為writingContext頂層鍵。
 
-POST /api/publication {op:"attach",id,lease,key,review}；review為{tool:"image_gen.imagegen",actuallyCalled:true,originalGeneratedPath:原始生圖檔路徑,sha256:圖片雜湊,inputSha256:UTF8(JSON.stringify(input,null,2))的SHA256,visualReview:{blackFur:true,yellowScarf:true,newComposition:true}}。確認attached=true後POST {op:"publish",id,lease}，再GET /api/state確認當日publication.id、四語文章與插圖可讀；成功即結束，不能再claim或等待。
+{"cmd":"validate","file":"candidate.json"}。valid:false只依errors／fields修正，保存如{"patch":{"learning":{"de":{"words":["…"]}}},"review":{}}至patch.json，再{"cmd":"patch","file":"patch.json"}。伺服器保留其他欄位，不重傳整篇。valid:true後建立內容{}的empty.json，用{"cmd":"write","file":"empty.json"}正式完成；必須written:true，validate不是write。程式檢查不能取代語言、事實、級數校對。
 
-失敗用POST {op:"fail",id,lease,error,blocked:true或false}。23:30後不再開始製作或補圖；GET /api/state會原子發布有效AI文章的無圖版，寫作也失敗才明確使用事件備用稿，沒有草稿不新增。全程不重設世界、不修改已刊日記或人工操作帳本。
+## 圖片與發布
+完成文章後才依實際場景用imagegen技能與內建image_gen.imagegen生一張全新手繪。先{"cmd":"download","path":"/illustrations/munich.png","file":"reference.png"}並目視參考角色及必要近期畫作。全黑毛色黃色圍巾、不加白斑，禁止複製裁切鏡像舊圖。目視新圖後{"cmd":"upload","file":"實際原始PNG路徑"}，不重新編碼。
+image-review.json含tool:"image_gen.imagegen",actuallyCalled:true,originalGeneratedPath:實際路徑,sha256:upload雜湊,visualReview:{blackFur:true,yellowScarf:true,newComposition:true}。
+{"cmd":"attach","file":"image-review.json"}成功後{"cmd":"publish"}，再{"cmd":"verify"}核對當天published、id、四語languages及新圖路徑；必要時下載已刊PNG確認可讀，不印完整世界與全文。成功立刻stop，不等待、不再claim或重畫。不改已刊文章，不重設世界、不人工改帳本。
 
-截止排程只需GET /api/state，再檢查當日publication結果，無待辦不生文不生圖。僅完成、失敗需介入或截止異常才通知，狀態未變保持安靜。
+## 截止、失敗與度量
+真實Europe/Berlin 23:05開始，同次未完成才每5分鐘檢查至23:30，不另設23:30喚起。GET有限重試；寫入逾時先查狀態、續領，不盲目重做。{"cmd":"fail","error":"遮罩原因","blocked":true或false}記錄障礙，不繞過權限；站仍可連時同次等23:30送sync觸發無圖保底，有效AI稿優先，寫作失敗才明示事件備用稿，無草稿不新增，當日不補圖。整次AI額度中斷仍需下次網站請求觸發截止。
+verify附metrics（位元組、請求／驗證失敗數、階段時間、總耗時）；每次工具另回clientElapsedMs，不代表精確token帳單。僅完成、失敗需介入或截止異常才通知，狀態未變保持安靜。
