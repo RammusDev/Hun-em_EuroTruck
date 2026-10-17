@@ -3,13 +3,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 const ORIGIN='https://hun-em-europe.honeygrass8.chatgpt.site';
 let token,claim,buffer='',chain=Promise.resolve();
+const metrics={commands:0,failures:0,httpAttempts:0,retries:0,elapsedMs:0};
 const folder=path.resolve('hunem-work');await fs.mkdir(folder,{recursive:true});
 const emit=x=>console.log(JSON.stringify(x));
 async function request(route,{body,binary=false}={}){
  if(!route.startsWith('/')||route.startsWith('//')||route.includes('\\'))throw Error('INVALID_PATH');
  for(let attempt=0;attempt<3;attempt++){
+  metrics.httpAttempts++;if(attempt)metrics.retries++;
   let r;try{r=await fetch(ORIGIN+route,{method:body===undefined?'GET':'POST',headers:{'OAI-Sites-Authorization':'Bearer '+token,...(body===undefined?{}:{'Content-Type':binary?'image/png':'application/json'})},body:body===undefined?undefined:binary?body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});}catch{if(body!==undefined||attempt===2)throw Error('NETWORK_FAILURE; read status before repeating a write');await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;}
   if(r.status===401||r.status===403)throw Error('SITE_AUTH_'+r.status+'; refresh get_site credential once, then stop if repeated');
+  if(body===undefined&&[409,429,502,503,504].includes(r.status)&&attempt<2){await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;}
   if(!r.ok)throw Error('SITE_HTTP_'+r.status);
   return binary&&body===undefined?Buffer.from(await r.arrayBuffer()):await r.json();
  }
@@ -20,8 +23,10 @@ async function execute(c){
  if(c.token){token=c.token;emit({ready:true});return;}
  if(!token)throw Error('AUTH_MISSING');
  if(c.cmd==='stop'){process.exit(0);}
+ metrics.commands++;
  let r;
  if(c.cmd==='health')r=await request('/api/health');
+ else if(c.cmd==='verify'&&c.day)r=await pub('verify',{day:c.day});
  else if(c.cmd==='sync'||c.cmd==='verify')r=await request('/api/worker');
  else if(c.cmd==='claim'){
   claim=await pub('claim',{resume:c.resume===true});
@@ -45,7 +50,8 @@ async function execute(c){
  }else if(c.cmd==='publish')r=await pub('publish');
  else if(c.cmd==='fail')r=await pub('fail',{error:c.error,blocked:!!c.blocked});
  else throw Error('UNKNOWN_COMMAND');
- emit({...r,clientElapsedMs:Date.now()-start});
+ metrics.elapsedMs+=Date.now()-start;await fs.writeFile(path.join(folder,'metrics.json'),JSON.stringify(metrics));
+ emit({...r,clientElapsedMs:Date.now()-start,transport:{httpAttempts:metrics.httpAttempts,retries:metrics.retries}});
 }
 // Raw mode avoids terminal echo and canonical-line truncation of JSON credentials.
 if(!process.stdin.isTTY)throw Error('TTY_REQUIRED; launch with tty:true');
@@ -54,5 +60,5 @@ emit({waitingForCredential:true,protocol:'JSON object per command; no credential
 process.stdin.on('data',chunk=>{
  if(chunk.includes('\u0003'))process.exit(0);
  buffer+=chunk;let c;try{c=JSON.parse(buffer.trim());}catch{return;}buffer='';
- chain=chain.then(()=>execute(c)).catch(e=>emit({error:String(e.message).replaceAll(token||'__NO_TOKEN__','[redacted]')}));
+ chain=chain.then(()=>execute(c)).catch(async e=>{metrics.failures++;await fs.writeFile(path.join(folder,'metrics.json'),JSON.stringify(metrics));emit({error:String(e.message).replaceAll(token||'__NO_TOKEN__','[redacted]')});});
 });
