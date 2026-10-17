@@ -18,7 +18,7 @@ export function pngReceipt(bytes){
  return {bytes:bytes.length,width,height,sha256:createHash('sha256').update(bytes).digest('hex')};
 }
 export async function readPlatformPng(file,fetcher=fetch){
- const url=validateFileUrl(file);const r=await fetcher(url,{redirect:'error',signal:AbortSignal.timeout(30000)});
+ const url=validateFileUrl(file);const r=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(30000)});
  if(!r.ok)throw Error('FILE_DOWNLOAD_FAILED');if(Number(r.headers.get('content-length')||0)>8*1024*1024)throw Error('FILE_TOO_LARGE');
  const reader=r.body?.getReader();if(!reader)throw Error('EMPTY_FILE');const chunks=[];let length=0;
  try{for(;;){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>8*1024*1024)throw Error('FILE_TOO_LARGE');chunks.push(Buffer.from(value));}}catch(e){await reader.cancel();throw e;}

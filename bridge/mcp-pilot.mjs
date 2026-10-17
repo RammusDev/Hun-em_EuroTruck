@@ -16,7 +16,7 @@ export async function pilotRpc(message,{identity,readStatus,readPacket,fileProbe
  if(!identity)return error(-32001,'Platform-authenticated MCP identity required');
  const name=message.params?.name,args=message.params?.arguments||{};
  if(Object.hasOwn(handlers,name)){try{const value=await handlers[name](args);return reply(value?.content?value:{content:[{type:'text',text:JSON.stringify(value)}],isError:false});}catch(e){return reply({content:[{type:'text',text:/^[A-Z_]{1,80}$/.test(e.message)?e.message:'MCP_OPERATION_FAILED'}],isError:true});}}
- if(name==='hunem_test_file_transfer'&&fileProbe){try{return reply({content:[{type:'text',text:JSON.stringify(await fileProbe(args))}],isError:false});}catch(e){return reply({content:[{type:'text',text:String(e.message)}],isError:true});}}
+ if(name==='hunem_test_file_transfer'&&fileProbe){try{return reply({content:[{type:'text',text:JSON.stringify(await fileProbe(args))}],isError:false});}catch(e){return reply({content:[{type:'text',text:/^[A-Z_]{1,80}$/.test(e.message)?e.message:'FILE_TRANSFER_FAILED'}],isError:true});}}
  if(!pilotTools.some(t=>t.name===name))return error(-32602,'Unknown read-only tool');
  if(typeof args!=='object'||Array.isArray(args)||Object.keys(args).some(k=>!['nonce',...(name==='hunem_read_writing_packet'?['day','includePacket']:[])].includes(k))||args.nonce!==undefined&&(typeof args.nonce!=='string'||args.nonce.length>64)||args.day!==undefined&&(typeof args.day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(args.day))||args.includePacket!==undefined&&typeof args.includePacket!=='boolean')return error(-32602,'Invalid arguments');
  try{const value=await(name==='hunem_status'?readStatus(args):readPacket(args));return reply({content:[{type:'text',text:JSON.stringify(value)}],isError:false});}
