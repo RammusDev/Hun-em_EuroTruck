@@ -49,7 +49,10 @@ header{border-bottom-color:#d8ccb5;}
 
 /* Square pixel slices preserve corner geometry; edge tiles repeat without stretching. */
 .map-wrap>.map-frame-title{padding:0 8px 12px;}
-.map-frame{padding:48px;background:#f5ecd8;}
+.map-frame{--map-frame-size:48px;padding:calc(var(--map-frame-size)*.6) calc(var(--map-frame-size)*.67) calc(var(--map-frame-size)*.69) calc(var(--map-frame-size)*.675);background:#f5ecd8;}
 .map-frame::after{border:48px solid transparent;border-image:url('/site-art/map-frame-medieval-v2.webp') 160 / 48px / 0 repeat;pointer-events:none;}
-@media(max-width:800px){.map-frame{padding:40px;}.map-frame::after{border-width:40px;border-image-width:40px;}}
-@media(max-width:600px){.map-frame{padding:30px;}.map-frame::after{border-width:30px;border-image-width:30px;}.map-wrap>.map-frame-title{padding:0 4px 10px;font-size:8px;letter-spacing:1px;}}
+@media(max-width:800px){.map-frame{--map-frame-size:40px;}.map-frame::after{border-width:40px;border-image-width:40px;}}
+@media(max-width:600px){.map-frame{--map-frame-size:30px;}.map-frame::after{border-width:30px;border-image-width:30px;}.map-wrap>.map-frame-title{padding:0 4px 10px;font-size:8px;letter-spacing:1px;}}
+
+/* Match the painted inner rim, rather than the transparent slice boundary. */
+.map-frame #map{border:0;}
