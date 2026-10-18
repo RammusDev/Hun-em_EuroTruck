@@ -48,8 +48,7 @@ body.album-open {overflow:hidden;}
 .album-opening {animation:album-arrive .6s ease-out;}.album-opening .left-page{animation:reveal-left 1.15s ease-out;}
 @keyframes album-arrive {from{opacity:.15;transform:translateY(25px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes reveal-left{0%,30%{opacity:.12}100%{opacity:1}}
-.album-turning-leaf {position:absolute;top:10px;bottom:14px;width:calc(50% - 11px);z-index:6;transform-style:preserve-3d;pointer-events:none;}
-.forward-leaf{left:50%;transform-origin:left center;}.backward-leaf{left:11px;transform-origin:right center;}
-.leaf-face{position:absolute;inset:0;backface-visibility:hidden;overflow:hidden;box-shadow:0 5px 24px #3d342940;background:#f8f1df;}.leaf-back{transform:rotateY(180deg);}.leaf-face>.album-page{height:100%;box-sizing:border-box;}
-@media(max-width:700px){.album-cover{left:11px;width:calc(100% - 22px);}.album-turning-leaf{left:11px;width:calc(100% - 22px);}.backward-leaf{transform-origin:right;}.album-desk{overflow:hidden;}}
+.album-book {overflow:hidden;}
+.album-outgoing {position:absolute;inset:10px 11px 14px;z-index:6;pointer-events:none;}
+@media(max-width:700px){.album-cover{left:11px;width:calc(100% - 22px);}.album-desk{overflow:hidden;}}
 @media(prefers-reduced-motion:reduce){.album-opening,.album-opening .left-page{animation:none;}}

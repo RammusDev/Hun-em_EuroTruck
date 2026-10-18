@@ -40,7 +40,7 @@ header, main, footer { max-width: 1440px; }
 .ledger-row:last-child { border-bottom:0; }
 .ledger-row strong { flex-shrink:0; color:#9a7054; font-weight:500; }
 .ledger-row strong.income { color:#4e7954; }
-@media(max-width:700px){.finance-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.finance-summary>div{padding:15px;}.finance-summary strong{font-size:19px;}.ledger-row{font-size:11px;gap:10px;}}
+@media(max-width:700px){.finance-section .section-top{flex-direction:column;align-items:flex-start;gap:10px;}.finance-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.finance-summary>div{padding:15px;}.finance-summary strong{font-size:19px;}.ledger-row{font-size:11px;gap:10px;}}
 .journal-spread.has-art { display:grid; grid-template-columns:minmax(0,1fr) minmax(210px,34%); gap:26px; align-items:start; }
 .journal-art { min-width:0; }
 .journal-art figure { margin:0 0 22px; padding:9px 9px 13px; background:#faf5e9; border:1px solid #e3dac8; box-shadow:0 5px 16px #5545280b; }

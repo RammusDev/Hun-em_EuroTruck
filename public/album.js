@@ -19,16 +19,17 @@
  const animate=async(el,frames,ms=duration())=>{try{await el.animate(frames,{duration:ms,easing:'cubic-bezier(.22,.55,.2,1)',fill:'forwards'}).finished;}catch{}};
  const turn=async direction=>{
   if(turning||closing||(direction<0?prev.disabled:next.disabled))return;turning=true;
-  const oldPage=spread.children[mobile.matches?0:direction>0?1:0]?.cloneNode(true);prev.disabled=next.disabled=true;
+  const oldSpread=spread.cloneNode(true);oldSpread.removeAttribute('id');oldSpread.classList.add('album-outgoing');oldSpread.setAttribute('aria-hidden','true');oldSpread.inert=true;prev.disabled=next.disabled=true;book.setAttribute('aria-busy','true');
   const target=page+direction,targets=photos.slice(target*perPage(),target*perPage()+perPage());
   await Promise.all(targets.map(art=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src=art.src;})));
   page=target;draw();prev.disabled=next.disabled=true;
-  if(oldPage){const leaf=document.createElement('div');leaf.className='album-turning-leaf '+(direction>0?'forward-leaf':'backward-leaf');leaf.setAttribute('aria-hidden','true');leaf.inert=true;
-   const front=document.createElement('div'),back=document.createElement('div');front.className='leaf-face';back.className='leaf-face leaf-back';front.append(oldPage);
-   const backPage=spread.children[mobile.matches?0:direction>0?0:1]?.cloneNode(true);if(backPage)back.append(backPage);leaf.append(front,back);book.append(leaf);
-   await animate(leaf,[{transform:'rotateY(0deg)',filter:'brightness(1)'},{offset:.48,transform:`rotateY(${direction>0?-88:88}deg)`,filter:'brightness(.7)'},{transform:`rotateY(${direction>0?-180:180}deg)`,filter:'brightness(1)'}]);leaf.remove();
-  }
-  turning=false;draw();
+  book.append(oldSpread);
+  const ms=matchMedia('(prefers-reduced-motion:reduce)').matches?1:440;
+  await Promise.all([
+   animate(oldSpread,[{opacity:1,transform:'translateX(0)'},{opacity:0,transform:`translateX(${-direction*28}px)`}],ms),
+   animate(spread,[{opacity:.15,transform:`translateX(${direction*28}px)`},{opacity:1,transform:'translateX(0)'}],ms)
+  ]);
+  oldSpread.remove();spread.getAnimations().forEach(a=>a.cancel());book.removeAttribute('aria-busy');turning=false;draw();
  };
  document.getElementById('open-album').onclick=async e=>{if(dialog.open)return;opener=e.currentTarget;draw();dialog.showModal();document.body.classList.add('album-open');turning=true;prev.disabled=next.disabled=true;dialog.classList.add('album-opening');const el=cover();await animate(el,[{transform:'rotateY(0deg)'},{transform:'rotateY(-180deg)'}]);el.remove();dialog.classList.remove('album-opening');turning=false;draw();};
  const close=async()=>{if(closing||turning)return;closing=true;prev.disabled=next.disabled=true;dialog.classList.add('album-closing');const el=cover();await animate(el,[{transform:'rotateY(-180deg)'},{transform:'rotateY(0deg)'}]);await animate(dialog,[{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(18px)'}],matchMedia('(prefers-reduced-motion:reduce)').matches?1:220);el.remove();dialog.classList.remove('album-closing');dialog.getAnimations().forEach(a=>a.cancel());dialog.close();closing=false;};
