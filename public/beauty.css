@@ -47,8 +47,9 @@ header{border-bottom-color:#d8ccb5;}
 @media(max-width:800px){.brand{font-size:21px;gap:9px;}.brand .cat-logo{width:48px;height:48px;flex-basis:48px;}.intro{grid-template-columns:1fr;gap:8px;padding:30px 0 24px;}.hero-cat{width:min(100%,500px);margin:0 auto;}.intro h1{font-size:34px;}.intro-copy{font-size:14px;}.intro-copy br{display:none;}.diary-grid{grid-template-columns:minmax(0,1fr);}.paper{padding:28px;}:is(.journey,.diary-section,.finance-section,.log-section) h2{font-size:23px;}.map-frame{padding:23px;}.map-frame::after{border-image-width:25px;}.map-frame-title{font-size:9px;}.map-wrap .map-caption{font-size:10px;}.finance-summary>div{padding:22px;}.paper h3{font-size:26px;}.section-top{gap:14px;}}
 @media(max-width:600px){.job-card{display:block;padding:28px 24px;}.job-card dl{gap:10px;}.job-card dl div{font-size:12px;}.map-frame{padding:20px;}.map-frame::after{border-image-width:22px;}.map-frame-title{font-size:8px;letter-spacing:1.4px;padding-bottom:10px;}.map-wrap .map-caption{padding:10px 4px 0;}.paper{padding:25px;}.paper .languages{gap:0;}.paper .languages button{font-size:11px;padding:10px 7px;}.paper #article-text{font-size:15px;line-height:2.15;}.paper #article-text.with-zhuyin{font-size:19px;line-height:2.7;}.finance-summary strong{font-size:23px;}.finance-summary .soda-summary strong{font-size:16px;}.finance-summary>div{padding:20px;}.ledger{padding:14px 22px;}.ledger-row{font-size:12px;gap:10px;}.diary-section{margin-top:42px;}.log-section .album-open-button{padding:10px 12px;gap:8px;}.log-section .album-launch{gap:12px;}}
 
-/* Heavier medieval frame stays outside the map's interactive rectangle. */
-.map-frame{padding:56px;background:#f5ecd8;}
-.map-frame::after{border-width:52px;border-image-source:url('/site-art/map-frame-medieval-v2.webp');border-image-slice:24%;border-image-width:52px;pointer-events:none;}
-@media(max-width:800px){.map-frame{padding:48px;}.map-frame::after{border-image-width:44px;}}
-@media(max-width:600px){.map-frame{padding:38px;}.map-frame::after{border-image-width:34px;}.map-frame-title{letter-spacing:1px;font-size:8px;}}
+/* Square pixel slices preserve corner geometry; edge tiles repeat without stretching. */
+.map-wrap>.map-frame-title{padding:0 8px 12px;}
+.map-frame{padding:48px;background:#f5ecd8;}
+.map-frame::after{border:48px solid transparent;border-image:url('/site-art/map-frame-medieval-v2.webp') 160 / 48px / 0 repeat;pointer-events:none;}
+@media(max-width:800px){.map-frame{padding:40px;}.map-frame::after{border-width:40px;border-image-width:40px;}}
+@media(max-width:600px){.map-frame{padding:30px;}.map-frame::after{border-width:30px;border-image-width:30px;}.map-wrap>.map-frame-title{padding:0 4px 10px;font-size:8px;letter-spacing:1px;}}
