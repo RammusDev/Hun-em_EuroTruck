@@ -92,12 +92,25 @@ function prepareReading(d){
  zhuyinPendingKey=key;status.textContent='正在準備注音，文章可先閱讀…';
  window.HunemReading.prepare(d).then(()=>{status.textContent='';renderDiary();}).catch(e=>{zhuyinFailedKey=key;status.textContent=e.message;}).finally(()=>{if(zhuyinPendingKey===key)zhuyinPendingKey=null;});
 }
+function ledgerIcon(t){
+ const c=t.category||'',label=t.label||'';
+ if(t.kind==='opening'||c==='opening'||/存款|準備金/.test(label))return 'savings';
+ if(t.amountCents>0||t.kind==='income')return 'income';
+ if(/hotel|accommodation|lodging/.test(c)||/旅館|住宿|入住/.test(label))return 'hotel';
+ if(c==='parking'||/停車/.test(label))return 'parking';
+ if(c==='meal'||/吃飯|餐飲|早餐|午餐|晚餐/.test(label))return 'meal';
+ if(c==='soda'||/汽水/.test(label))return 'soda';
+ if(c==='fuel'||/柴油|加油/.test(label))return 'fuel';
+ if(c==='maintenance'||/保養|維修/.test(label))return 'maintenance';
+ if(/transport|flight|train|ferry/.test(c)||/交通|機票|車票|渡輪/.test(label))return 'transport';
+ return 'receipt';
+}
 function renderFinance(){
  const f=state.finance,summary=$('finance-summary'),ledger=$('ledger');summary.replaceChildren();ledger.replaceChildren();if(!f){summary.textContent='帳本準備中…';return;}
  const euro=n=>'€'+(n/100).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
  const held=state.heldSoda??state.sodaLife?.bottle;
  for(const [label,value,detail] of [['可用現金',euro(f.cashCents)],['柴油餘量',f.fuelLiters.toFixed(1)+' L'],['汽水 · 目前持有',held?.name||'目前沒有汽水',held?.flavour]]){const box=document.createElement('div'),small=document.createElement('span'),strong=document.createElement('strong');small.textContent=label;strong.textContent=value;if(label.startsWith('汽水'))box.className='soda-summary';box.append(small,strong);if(detail){const note=document.createElement('p');note.className='soda-flavour';note.textContent=detail;box.append(note);}summary.append(box);}
- for(const t of [...f.entries].sort((a,b)=>b.time-a.time).slice(0,9)){const row=document.createElement('div'),desc=document.createElement('span'),amount=document.createElement('strong');const date=document.createElement('small');date.textContent=time(t.time);desc.textContent=`${t.label}${t.kind==='transfer'?'（轉入準備金）':''}`;row.append(date);amount.textContent=(t.amountCents<0?'−':'+')+euro(Math.abs(t.amountCents));row.className='ledger-row';amount.className=t.amountCents>0?'income':'';row.append(desc,amount);ledger.append(row);}
+ for(const t of [...f.entries].sort((a,b)=>b.time-a.time).slice(0,9)){const row=document.createElement('div'),desc=document.createElement('span'),amount=document.createElement('strong');const date=document.createElement('small');date.textContent=time(t.time);desc.textContent=`${t.label}${t.kind==='transfer'?'（轉入準備金）':''}`;row.append(date);const icon=document.createElement('img');icon.className='ledger-icon';icon.src='/site-art/ledger-'+ledgerIcon(t)+'.svg';icon.alt='';icon.width=32;icon.height=32;icon.setAttribute('aria-hidden','true');row.append(icon);amount.textContent=(t.amountCents<0?'−':'+')+euro(Math.abs(t.amountCents));row.className='ledger-row';amount.className=t.amountCents>0?'income':'';row.append(desc,amount);ledger.append(row);}
 }
 const time=t=>new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(t);
 async function initMap(){if(state.googleKey){await new Promise((resolve,reject)=>{window.initHunEmMap=resolve;const script=document.createElement('script');script.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(state.googleKey)}&callback=initHunEmMap&loading=async`;script.onerror=reject;document.head.append(script);});map=new google.maps.Map($('map'),{center:{lat:state.position[1],lng:state.position[0]},zoom:9,mapId:'DEMO_MAP_ID',renderingType:'VECTOR',mapTypeControl:false,streetViewControl:false});googleMode=true;marker=new google.maps.Marker({map,icon:googleAvatar(),title:'Hun-em'});line=new google.maps.Polyline({map,strokeColor:'#526f47',strokeWeight:5});}else{if(!window.L)throw Error('地圖程式未載入。請確認網路連線後重新整理。');map=L.map('map',{scrollWheelZoom:false}).setView([state.position[1],state.position[0]],9);L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',maxZoom:18}).addTo(map);state.cities.forEach(c=>L.circleMarker([c.p[1],c.p[0]],{radius:5,color:'#768368',fillOpacity:1}).addTo(map).bindTooltip(`${c.name} · ${c.latin}`,{permanent:true,direction:'top',className:'city-label'}));marker=L.marker([state.position[1],state.position[0]],{icon:leafletAvatar()}).addTo(map).bindTooltip('Hun-em');line=L.polyline([],{color:'#526f47',weight:5}).addTo(map);}}

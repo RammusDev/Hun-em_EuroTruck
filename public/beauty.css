@@ -137,3 +137,17 @@ header{border-bottom-color:#d8ccb5;}
 .ledger-row strong{align-self:flex-end;margin-top:auto;font-size:20px;}
 @media(max-width:800px){.finance-section .ledger{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:480px){.finance-section .ledger{grid-template-columns:minmax(0,1fr);gap:10px;}.finance-section .ledger-row{padding:18px;gap:7px;}.ledger-row strong{font-size:19px;}}
+
+/* Fixed icon slots keep long labels and amounts inside the ledger cards. */
+.finance-section .ledger-row{position:relative;padding-left:68px;}
+.ledger-icon{position:absolute;left:20px;top:50%;transform:translateY(-50%);width:32px;height:32px;object-fit:contain;}
+.ledger-row>span{min-width:0;max-width:100%;}.ledger-row strong{max-width:100%;overflow-wrap:anywhere;}
+.log-section .album-open-button{display:flex;flex-direction:column;gap:0;padding:0;background:transparent;border:0;box-shadow:none;flex-shrink:0;min-height:44px;color:#78664a;}
+.log-section .album-open-button .album-button-art{display:block;width:120px;height:84px;object-fit:contain;transition:transform .18s ease;}
+.log-section .album-open-button:hover .album-button-art{transform:rotate(-3deg);}
+.log-section .album-open-button:focus-visible{outline:2px solid #8d744a;outline-offset:4px;border-radius:4px;}
+.log-section .album-open-button small{font-size:11px;color:#78664a;margin:0;line-height:1.8;}
+@media(max-width:600px){.log-section .album-open-button .album-button-art{width:100px;height:70px;}.finance-section .ledger-row{padding-left:62px;}.ledger-icon{left:18px;width:28px;height:28px;}}
+@media(prefers-reduced-motion:reduce){.log-section .album-open-button .album-button-art{transition:none;}}
+
+.finance-section .ledger-row:last-child{padding-left:68px;}@media(max-width:600px){.finance-section .ledger-row:last-child{padding-left:62px;}}
