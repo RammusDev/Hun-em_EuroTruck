@@ -1,4 +1,4 @@
-import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,resetWorld,correctStart} from '../../../lib/runtime';
+import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,resetWorld,correctStart,updateDrinkPreferences} from '../../../lib/runtime';
 import {publication} from '../../../lib/publication';
 export const dynamic='force-dynamic';
 const result=(value:any,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
@@ -19,6 +19,7 @@ export async function GET(req:Request){try{
 export async function POST(req:Request){try{
  const u=new URL(req.url),route=u.pathname;
  if(req.headers.get('origin')&&req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);
+ if(route==='/api/update-drink-preferences')return result(await updateDrinkPreferences());
  if(route==='/api/config'){
   const config:any=await req.json();return result(await transaction(async p=>{
    const file='/hunem/assets/language-learning.json',current=JSON.parse(p.files[file]);

@@ -51,6 +51,19 @@ export async function getObject(key:string){return bucket().get(key);}
 export async function research(p:any){const work=core.createTopicResearcher(root);await work.schedule(p.world);p.world.localTopicCache=work.entries;}
 export const engine=core;
 
+// Explicit owner maintenance: update only the two reviewed drink preference files.
+export async function updateDrinkPreferences(){
+ return transaction(async p=>{
+  const paths=['/hunem/CHARACTER.md','/hunem/assets/sodas.json'];
+  const expected=['ac4cc91119d699d6a3479f788b1ebdd04eb5dd7696baffc47c2170adfc20973b','e297295830e1ee5ec2c726b0ebf6f3eb87411069603a2c961868149827cc4fa9'];
+  for(let i=0;i<paths.length;i++){const value=p.files[paths[i]];if(hash(value)!==expected[i]&&value!==(bundledFiles as any)[paths[i]])throw new Conflict('設定已變更，停止覆寫');}
+  const backupKey='backups/manual-before-drink-preferences-v2-20261018.json';
+  if(!(await bucket().get(backupKey)))await bucket().put(backupKey,json(p),{httpMetadata:{contentType:'application/json'}});
+  for(const path of paths)core.writeFileSync(path,(bundledFiles as any)[path]);
+  return {updated:true,backupKey,catalogVersion:2,products:JSON.parse((bundledFiles as any)[paths[1]]).products.length,hashes:Object.fromEntries(paths.map(path=>[path,hash((bundledFiles as any)[path])]))};
+ },false,true);
+}
+
 export async function correctStart(a:any){
  if(a?.expectedWorldId!=='c9181921-e285-4ada-bf6f-c763c678964e')throw Error('INVALID_CORRECTION_REQUEST');
  return transaction(async p=>{
