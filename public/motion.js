@@ -35,7 +35,7 @@
     if(j.phase==='road'){
      const parts=Object.fromEntries(clock.formatToParts(s.now).map(p=>[p.type,p.value]));
      const time=+parts.hour*60+(+parts.minute)+(+parts.second)/60;
-     if(['Sat','Sun'].includes(parts.weekday)||time<480||time>=960)allowed=0;
+     if(time<480||time>=960)allowed=0;
      else allowed=Math.min(allowed,240-(s.duty?.driveSince||0),300-(s.duty?.workSince||0),960-time+carry/minute);
     }
     const route=path(leg.coords),timing=globalThis.HunemRouteTiming.compile(leg);

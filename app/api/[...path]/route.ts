@@ -1,4 +1,4 @@
-import {transaction,seed,stateView,putObject,research,engine,committed,Conflict} from '../../../lib/runtime';
+import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,resetWorld} from '../../../lib/runtime';
 import {publication} from '../../../lib/publication';
 export const dynamic='force-dynamic';
 const result=(value:any,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
@@ -34,6 +34,7 @@ export async function POST(req:Request){try{
   }));
  }
  if(route==='/api/import')return result(await seed(await req.json()));
+ if(route==='/api/reset-world')return result(await resetWorld(await req.json()));
  if(route==='/api/object')return result(await putObject(u.searchParams.get('key')||'',await req.arrayBuffer()));
  if(route==='/api/publication'){const body:any=await req.json();return result(await transaction(p=>publication(p,body.op,body)));}
  if(route==='/api/retry-route'){if(req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);return result(await transaction(async p=>{await engine.retryPendingRoute(p.world,engine.getRoute);return stateView(p);}));}
