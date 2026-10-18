@@ -55,8 +55,8 @@ export const engine=core;
 export async function updateDrinkPreferences(){
  return transaction(async p=>{
   const paths=['/hunem/CHARACTER.md','/hunem/assets/sodas.json'];
-  const expected=['ac4cc91119d699d6a3479f788b1ebdd04eb5dd7696baffc47c2170adfc20973b','e297295830e1ee5ec2c726b0ebf6f3eb87411069603a2c961868149827cc4fa9'];
-  for(let i=0;i<paths.length;i++){const value=p.files[paths[i]];if(hash(value)!==expected[i]&&value!==(bundledFiles as any)[paths[i]])throw new Conflict('設定已變更，停止覆寫');}
+  const expected=['cf0ae4f3d47a88648131368fb5044769462d430d179dec97ad6745614af33d3d',null];
+  for(let i=0;i<paths.length;i++){const value=p.files[paths[i]],digest=value===undefined?null:hash(value);if(digest!==expected[i]&&value!==(bundledFiles as any)[paths[i]])throw new Conflict('設定已變更，停止覆寫');}
   const backupKey='backups/manual-before-drink-preferences-v2-20261018.json';
   if(!(await bucket().get(backupKey)))await bucket().put(backupKey,json(p),{httpMetadata:{contentType:'application/json'}});
   for(const path of paths)core.writeFileSync(path,(bundledFiles as any)[path]);
