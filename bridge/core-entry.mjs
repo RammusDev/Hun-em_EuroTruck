@@ -8,4 +8,4 @@ export {plannedTopicAnchors,topicPolicy} from '../../lib/local-topics.mjs';
 export {albumFromWorld} from '../../lib/album.mjs';
 export {validateDailyWriting,digest,writingContent,writingMode} from '../../lib/daily-writing.mjs';
 export {hydrate,changes,readFileSync,writeFileSync} from './fs.mjs';
-export {freshWorldPayload} from '../../lib/world-reset.mjs';
+export {freshWorldPayload,correctHomeStart} from '../../lib/world-reset.mjs';

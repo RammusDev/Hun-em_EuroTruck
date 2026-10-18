@@ -50,6 +50,18 @@ export async function getObject(key:string){return bucket().get(key);}
 export async function research(p:any){const work=core.createTopicResearcher(root);await work.schedule(p.world);p.world.localTopicCache=work.entries;}
 export const engine=core;
 
+export async function correctStart(a:any){
+ if(a?.expectedWorldId!=='c9181921-e285-4ada-bf6f-c763c678964e')throw Error('INVALID_CORRECTION_REQUEST');
+ return transaction(async p=>{
+  if(p.startCorrection)return {...p.startCorrection,reused:true};
+  if(p.world.publicationWorldId!==a.expectedWorldId)throw new Conflict('世界身份已改變');
+  const backupKey='backups/manual-before-home-start-correction-20261018.json';
+  if(!(await bucket().get(backupKey)))await bucket().put(backupKey,json(p),{httpMetadata:{contentType:'application/json'}});
+  const result=core.correctHomeStart(p.world);p.world.realAt=Date.now();
+  p.startCorrection={...result,worldId:p.world.publicationWorldId,at:Date.now(),backupKey};return p.startCorrection;
+ },false,true);
+}
+
 export async function resetWorld(a:any){
  if(a?.scope!=='all'||!/^[-a-zA-Z0-9]{8,80}$/.test(a.requestId||'')||typeof a.expectedWorldId!=='string')throw Error('INVALID_RESET_REQUEST');
  return transaction(async p=>{
