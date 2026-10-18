@@ -128,3 +128,12 @@ header{border-bottom-color:#d8ccb5;}
 .ledger-row{padding:15px 0;align-items:baseline;}.ledger-row strong{font-family:Georgia,serif;font-size:15px;}
 @media(max-width:1100px){.job-card dl{grid-template-columns:repeat(3,minmax(0,1fr));}.job-card dl div:last-child{grid-column:auto;display:block;}.job-card dl div:last-child dd{font-size:17px;margin-top:5px;}}
 @media(max-width:600px){.job-card{padding:24px;}.job-card h3{font-size:21px;}.job-card dl{gap:12px;}.job-card dd,.job-card dl div:last-child dd{font-size:15px;}.job-card dt{font-size:11px;}.diary-grid.is-empty>.paper{padding:24px;}#diary-empty:not([hidden]){grid-template-columns:32px minmax(0,1fr);gap:4px 14px;padding:6px 0;}#diary-empty .empty-icon{font-size:32px;}#diary-empty h3{font-size:21px;}#diary-empty p{font-size:12px;}.log-section .event{grid-template-columns:minmax(0,1fr);gap:4px;padding:16px 0;}.log-section #events{padding-left:22px;}.log-section .event::after{left:-28px;}.ledger-row strong{font-size:14px;}}
+
+/* Latest nine transactions, read left to right in a three-column ledger. */
+.finance-section .ledger{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:0;border:0;background:transparent;}
+.finance-section .ledger-row,.finance-section .ledger-row:last-child{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0;padding:20px;border:1px solid #dfd3bb;border-radius:3px;background:#faf6eb;line-height:1.8;}
+.ledger-row small{font-size:11px;color:#887658;font-variant-numeric:tabular-nums;}
+.ledger-row>span{overflow-wrap:anywhere;font-size:13px;color:#5d503b;}
+.ledger-row strong{align-self:flex-end;margin-top:auto;font-size:20px;}
+@media(max-width:800px){.finance-section .ledger{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:480px){.finance-section .ledger{grid-template-columns:minmax(0,1fr);gap:10px;}.finance-section .ledger-row{padding:18px;gap:7px;}.ledger-row strong{font-size:19px;}}
