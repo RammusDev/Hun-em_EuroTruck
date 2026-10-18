@@ -4,6 +4,7 @@ export const dynamic='force-dynamic';
 const result=(value:any,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
 export async function GET(req:Request){try{
  const route=new URL(req.url).pathname;
+ if(route==='/api/state'&&new URL(req.url).searchParams.get('view')==='committed')return result({...stateView(await committed()),syncPending:true});
  if(route==='/api/state'){try{return result(await transaction(async p=>stateView(p)));}catch(e){if(!(e instanceof Conflict))throw e;return result({...stateView(await committed()),syncPending:true});}}
  if(route==='/api/health')return result({service:'hun-em',clock:'Europe/Berlin',storage:'D1 + R2'});
  if(route==='/api/worker')return result(await transaction(async p=>({version:2,now:p.world.now,day:engine.realDay(Date.now()),syncPending:Date.now()-p.world.realAt>60000,...await publication(p,'verify',{})})));
