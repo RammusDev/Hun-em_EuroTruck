@@ -2,8 +2,8 @@ let state, map, marker, line, googleMode=false, currentDiary=null, language='zh'
 let motion, motionFresh=false, animationId=null, lastMapFrame=0, refreshSequence=0, appliedSequence=0;
 let markerArt='';
 function markerSource(){return window.HunemAppearance.markerSource(state);}
-function leafletAvatar(){return L.divIcon({className:'cat-marker',html:'<img src="'+markerSource()+'" width="56" height="56" alt="Hun-em">',iconSize:[56,56],iconAnchor:[28,54],tooltipAnchor:[0,-48]});}
-function googleAvatar(){return {url:markerSource(),scaledSize:new google.maps.Size(56,56),anchor:new google.maps.Point(28,54)};}
+function leafletAvatar(){return L.divIcon({className:'cat-marker',html:'<img src="'+markerSource()+'" width="44" height="50" alt="Hun-em">',iconSize:[44,50],iconAnchor:[22,47],tooltipAnchor:[0,-44]});}
+function googleAvatar(){return {url:markerSource(),scaledSize:new google.maps.Size(44,50),anchor:new google.maps.Point(22,47)};}
 function updateMarkerArt(){if(!marker)return;const next=markerSource();if(next===markerArt)return;if(googleMode)marker.setIcon(googleAvatar());else marker.setIcon(leafletAvatar());markerArt=next;}
 function stopMapAnimation(){if(animationId!==null)cancelAnimationFrame(animationId);animationId=null;}
 function paintMarker(p){if(!marker||!p)return;if(googleMode)marker.setPosition({lat:p[1],lng:p[0]});else marker.setLatLng([p[1],p[0]]);}
