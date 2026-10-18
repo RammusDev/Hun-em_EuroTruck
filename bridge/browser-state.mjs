@@ -1,6 +1,8 @@
 // Presentation projection only; the full persisted world and routes stay intact.
 export function browserState(view){
  const result={...view};
+ const bottle=view.sodaLife?.bottle;
+ result.heldSoda=bottle?{name:bottle.name,brand:bottle.brand,flavour:bottle.flavour}:null;
  for(const key of ['economy','truck','visits','sodaLife','leisurePlans','journalLegacyGrammarIds'])delete result[key];
  if(view.holidayDecisions)result.holidayDecisions=view.holidayDecisions.slice(-1);
  if(view.job){
