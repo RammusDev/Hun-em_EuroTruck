@@ -17,6 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-Hant">
+      <head><link rel="stylesheet" href="/access.css"/></head>
       <body className="antialiased">{children}</body>
     </html>
   );
