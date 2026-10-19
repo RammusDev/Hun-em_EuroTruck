@@ -1,8 +1,8 @@
 'use client';
 import {useEffect,useState} from 'react';
-export default function Panel({admin=false}:{admin?:boolean}){
+export default function Panel({admin=false,autoEnter=false}:{admin?:boolean;autoEnter?:boolean}){
  const [me,setMe]=useState<any>(null),[data,setData]=useState<any>(null),[error,setError]=useState(''),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[limit,setLimit]=useState(10);
- async function refresh(){const r=await fetch('/access/status');if(r.status===401){setMe({signedOut:true});return;}const m:any=await r.json();if(!r.ok)throw Error(m.error);setMe(m);if(admin&&m.owner){setData(null);const a=await fetch('/access/admin');const d:any=await a.json();if(!a.ok)throw Error(d.error);setData(d);setLimit(d.capacity);}}
+ async function refresh(){const r=await fetch('/access/status',{cache:'no-store'});if(r.status===401){if(autoEnter&&!admin){location.replace('/probe/login');return;}setMe({signedOut:true});return;}const m:any=await r.json();if(!r.ok)throw Error(m.error);if(autoEnter&&!admin&&m.readerAccess===true){location.replace('/journey');return;}setMe(m);if(admin&&m.owner){setData(null);const a=await fetch('/access/admin');const d:any=await a.json();if(!a.ok)throw Error(d.error);setData(d);setLimit(d.capacity);}}
  useEffect(()=>{refresh().catch(e=>setError(e.message));},[]);
  async function post(action:string,body:any){setBusy(true);setError('');try{const r=await fetch('/access/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d:any=await r.json();if(!r.ok)throw Error(d.error);if(action==='apply')setError(d.notification==='not_configured'?'申請已保存，通知寄信尚未設定。':'申請已保存，通知狀態：'+d.notification);if(action==='retry')setError('通知處理結果：'+d.state);await refresh();}catch(e:any){setError(e.message);}finally{setBusy(false);}}
  const labels:any={unrequested:'尚未申請',pending:'等待審核',approved:'已核准',rejected:'未核准',revoked:'權限已撤銷'};
