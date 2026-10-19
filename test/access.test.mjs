@@ -1,0 +1,56 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';import {readFileSync,readdirSync} from 'node:fs';import {register,principal,allowed,submit,decide,setCapacity,notify,removeMember,consumeFlow} from '../lib/access.mjs';
+import ts from 'typescript';import {seal} from '../lib/probe.mjs';
+function database(){const sql=new DatabaseSync(':memory:');for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(x=>x.endsWith('.sql')))sql.exec(readFileSync(new URL('../drizzle/'+name,import.meta.url),'utf8'));const db={prepare(q){const statement=sql.prepare(q);let args=[];return {bind(...v){args=v;return this;},async first(){return statement.get(...args)||null;},async run(){const r=statement.run(...args);return {meta:{changes:Number(r.changes)}};},async all(){return {results:statement.all(...args)};},execute(){const r=statement.run(...args);return {meta:{changes:Number(r.changes)}};}};},async batch(statements){sql.exec('BEGIN');try{const r=statements.map(s=>s.execute());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};return db;}
+async function setup(){const db=database(),ownerEmail='owner@gmail.com';const a=await register(db,{sub:'owner',email:ownerEmail},ownerEmail);const b=await register(db,{sub:'reader',email:'reader@gmail.com'},ownerEmail);const c=await register(db,{sub:'reader2',email:'reader2@gmail.com'},ownerEmail);return {db,a,b,c,admin:await principal(db,a),reader:await principal(db,b),other:await principal(db,c)};}
+test('login nonce is single-use and expired/missing flows are rejected',async()=>{const db=database();await db.prepare('INSERT INTO auth_flows(nonce,expires) VALUES(?,?)').bind('valid',200).run();assert.equal(await consumeFlow(db,'valid',100),true);assert.equal(await consumeFlow(db,'valid',100),false);await db.prepare('INSERT INTO auth_flows(nonce,expires) VALUES(?,?)').bind('expired',200).run();assert.equal(await consumeFlow(db,'expired',200),false);assert.equal(await consumeFlow(db,'missing',100),false);});
+test('7 day reader session survives day one; stale owner cannot mutate after 30 minutes',async()=>{
+ const {db,a,b,admin,reader}=await setup();await submit(db,reader,'期限測試申請','https://probe.test','owner@gmail.com');await decide(db,admin,'reader','approve');
+ assert.equal(allowed(await principal(db,b,b.authAt+86400000)),true);assert.equal(await principal(db,b,b.exp),null);
+ const stale=await principal(db,a,a.authAt+1800000);assert.equal(stale.owner,1);assert.equal(stale.adminFresh,false);assert.equal(allowed(stale),true);
+ await assert.rejects(()=>decide(db,stale,'reader','revoke'),/FORBIDDEN/);await assert.rejects(()=>setCapacity(db,stale,20),/FORBIDDEN/);await assert.rejects(()=>removeMember(db,stale,'reader'),/FORBIDDEN/);
+});
+test('owner removal invalidates sessions and permits a new application without erasing audit',async()=>{
+ const {db,b,admin,reader}=await setup();await submit(db,reader,'首次申請測試','https://probe.test','owner@gmail.com');await decide(db,admin,'reader','approve');
+ await assert.rejects(()=>removeMember(db,reader,'reader'),/FORBIDDEN/);assert.equal(await removeMember(db,admin,'owner'),false);
+ assert.equal(await removeMember(db,admin,'reader'),true);assert.equal(await principal(db,b),null);assert.equal(await db.prepare('SELECT * FROM access_requests WHERE sub=?').bind('reader').first(),null);
+ assert.equal((await db.prepare('SELECT state FROM notification_outbox').first()).state,'cancelled');assert.equal((await db.prepare("SELECT COUNT(*) n FROM audit_events WHERE action IN ('approve','remove')").first()).n,2);
+ const fresh=await register(db,{sub:'reader',email:'reader@gmail.com'},'owner@gmail.com');const p=await principal(db,fresh);assert.equal(p.status,'unrequested');assert.equal((await submit(db,p,'重新申請測試','https://probe.test','owner@gmail.com')).created,true);
+});
+test('unapproved authenticated user is denied; approval grants; revocation denies existing session',async()=>{const {db,a,b,admin,reader}=await setup();assert.equal(allowed(null),false);assert.equal(allowed(reader),false);assert.equal(allowed(admin),true);assert.equal(await principal(db,{...b,sid:'forged'}),null);await submit(db,reader,'請讓我觀看測試內容','https://probe.test','owner@gmail.com');assert.equal(await decide(db,admin,'reader','approve'),true);assert.equal(allowed(await principal(db,b)),true);await decide(db,admin,'reader','revoke');assert.equal(allowed(await principal(db,b)),false);await db.prepare('DELETE FROM sessions WHERE id=?').bind(a.sid).run();assert.equal(await principal(db,a),null);});
+test('only owner can decide; owner binding cannot be replaced; expired session rejected',async()=>{const {db,b,admin,reader}=await setup();await assert.rejects(()=>decide(db,reader,'reader','approve'),/FORBIDDEN/);const fake=await register(db,{sub:'not-owner',email:'owner@gmail.com'},'owner@gmail.com');assert.equal((await principal(db,fake)).owner,0);assert.equal(await decide(db,admin,'owner','revoke'),false);assert.equal(await principal(db,b,b.exp+1),null);});
+test('duplicate application is deduplicated and capacity prevents concurrent approvals',async()=>{const {db,admin,reader,other}=await setup();await assert.rejects(()=>submit(db,reader,'a','https://probe.test','owner@gmail.com'));await submit(db,reader,'申請理由測試一','https://probe.test','owner@gmail.com');const duplicate=await submit(db,reader,'申請理由測試二','https://probe.test','owner@gmail.com');assert.equal(duplicate.created,false);assert.equal((await db.prepare('SELECT COUNT(*) n FROM notification_outbox').first()).n,1);await submit(db,other,'申請理由測試三','https://probe.test','owner@gmail.com');await setCapacity(db,admin,1);const results=await Promise.all([decide(db,admin,'reader','approve'),decide(db,admin,'reader2','approve')]);assert.equal(results.filter(Boolean).length,1);assert.equal((await db.prepare("SELECT COUNT(*) n FROM members WHERE status='approved'").first()).n,1);});
+test('Gmail outbox retries auth failure, sends minimal MIME and does not resend accepted mail',async()=>{
+ const {db,reader}=await setup();await submit(db,reader,'private reason never email','https://probe.test','owner@gmail.com',1000);
+ assert.equal((await notify(db,{},()=>{throw Error('must not send');},1000)).state,'not_configured');
+ const config={GOOGLE_CLIENT_ID:'test-client',GMAIL_CLIENT_SECRET:'test-secret',GMAIL_REFRESH_TOKEN:'test-refresh',GMAIL_SENDER_EMAIL:'sender@gmail.com',OWNER_EMAIL:'owner@gmail.com'};
+ assert.equal((await notify(db,config,async()=>new Response('',{status:400}),1000)).state,'failed');
+ assert.equal((await notify(db,config,()=>{throw Error('too soon');},1001)).state,'idle');
+ let sends=0;const sent=await notify(db,config,async(url,options)=>{
+  if(url==='https://oauth2.googleapis.com/token'){assert.equal(options.body.get('grant_type'),'refresh_token');return Response.json({access_token:'test-access'});}
+  sends++;assert.equal(url,'https://gmail.googleapis.com/gmail/v1/users/sender%40gmail.com/messages/send');assert.equal(options.headers.Authorization,'Bearer test-access');
+  const mime=Buffer.from(JSON.parse(options.body).raw,'base64url').toString();assert.match(mime,/To: owner@gmail.com/);assert.match(mime,/From: sender@gmail.com/);const body=Buffer.from(mime.split('\r\n\r\n')[1],'base64').toString();assert.match(body,/https:\/\/probe.test\/admin/);assert.ok(!body.includes('private reason'));assert.ok(!body.includes('reader@gmail.com'));return Response.json({id:'gmail-test'});
+ },200000);assert.equal(sent.state,'accepted');assert.equal(sends,1);assert.equal((await notify(db,config,()=>{throw Error('duplicate');},300000)).state,'idle');
+});
+test('Gmail unknown send outcome is held for review, never blindly retried',async()=>{
+ const {db,reader}=await setup();await submit(db,reader,'申請測試理由','https://probe.test','owner@gmail.com',1000);
+ const config={GOOGLE_CLIENT_ID:'test',GMAIL_CLIENT_SECRET:'test',GMAIL_REFRESH_TOKEN:'test',GMAIL_SENDER_EMAIL:'sender@gmail.com',OWNER_EMAIL:'owner@gmail.com'};
+ const result=await notify(db,config,async(url)=>{if(url.includes('/token'))return Response.json({access_token:'test'});throw Error('network timeout');},1000);
+ assert.equal(result.state,'review');assert.equal((await notify(db,config,()=>{throw Error('must not retry');},200000)).state,'idle');
+});
+test('actual HTTP handlers enforce roles, CSRF, approval and direct image access',async()=>{
+ const {db,a,b}=await setup(),secret='test-only-secret-'.repeat(3);globalThis.__probeTestEnv={DB:db,PROBE_SESSION_SECRET:secret,OWNER_EMAIL:'owner@gmail.com'};
+ let source=readFileSync(new URL('../app/access/[action]/route.ts',import.meta.url),'utf8').replace("import {env} from 'cloudflare:workers';",'const env=globalThis.__probeTestEnv;');for(const file of ['probe','access'])source=source.replace(`'../../../lib/${file}.mjs'`,JSON.stringify(new URL(`../lib/${file}.mjs`,import.meta.url).href));
+ const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;const route=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+ const tokens={owner:await seal(a,secret),reader:await seal(b,secret),staleOwner:await seal({...a,authAt:Date.now()-1800001},secret)};
+ async function request(path,who,body,origin='https://probe.test'){const headers={};if(who)headers.cookie='__Host-probe_session='+tokens[who];if(body){headers.origin=origin;headers['content-type']='application/json';}const req=new Request('https://probe.test/access/'+path,{method:body?'POST':'GET',headers,...(body?{body:JSON.stringify(body)}:{})});return (body?route.POST:route.GET)(req);}
+ for(const endpoint of ['status','admin','content','image'])assert.equal((await request(endpoint,null)).status,401);
+ for(const endpoint of ['admin','content','image'])assert.equal((await request(endpoint,'reader')).status,403);
+ assert.equal((await request('admin','staleOwner')).status,403);assert.equal((await request('retry','staleOwner',{})).status,403);assert.equal((await request('decision','staleOwner',{sub:'reader',action:'approve'})).status,403);
+ assert.equal((await request('decision','reader',{sub:'reader',action:'approve'})).status,403);
+ assert.equal((await request('apply','reader',{reason:'請核准這次測試'},'https://attacker.test')).status,403);
+ const application=await request('apply','reader',{reason:'請核准這次測試',email:'owner@gmail.com',sub:'owner'});assert.equal(application.status,200);assert.equal((await application.json()).notification,'not_configured');assert.equal((await db.prepare('SELECT sub FROM access_requests').first()).sub,'reader');
+ assert.equal((await request('decision','owner',{sub:'reader',action:'approve'})).status,200);
+ const content=await request('content','reader');assert.equal(content.status,200);assert.match(content.headers.get('content-type'),/charset=utf-8/i);assert.equal((await content.json()).title,'已核准讀者測試內容');assert.equal((await request('image','reader')).status,200);
+ assert.equal((await request('decision','owner',{sub:'reader',action:'revoke'})).status,200);
+ assert.equal((await request('content','reader')).status,403);assert.equal((await request('image','reader')).status,403);assert.equal((await request('unknown','owner')).status,404);
+});

@@ -1,0 +1,2 @@
+import type {ReactNode} from 'react';
+export default function PolicyLayout({title,children}:{title:string;children:ReactNode}){return <main style={{maxWidth:800,margin:'40px auto',padding:'0 24px 48px',fontFamily:'system-ui,sans-serif',lineHeight:1.9,color:'#2f2921'}}><nav aria-label="公開資訊"><a href="/about">專案介紹</a> · <a href="/privacy">隱私政策</a> · <a href="/terms">服務條款</a> · <a href="/">登入與申請</a></nav><h1>{title}</h1><p>更新日期：2026年10月19日</p>{children}</main>}

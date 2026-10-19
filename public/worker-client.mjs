@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 const ORIGIN='https://hun-em-europe.honeygrass8.chatgpt.site';
-let token,claim,buffer='',chain=Promise.resolve();
+let token,serviceTicket,claim,buffer='',chain=Promise.resolve();
 const metrics={commands:0,failures:0,httpAttempts:0,retries:0,elapsedMs:0};
 const folder=path.resolve('hunem-work');await fs.mkdir(folder,{recursive:true});
 const emit=x=>console.log(JSON.stringify(x));
@@ -10,8 +10,8 @@ async function request(route,{body,binary=false}={}){
  if(!route.startsWith('/')||route.startsWith('//')||route.includes('\\'))throw Error('INVALID_PATH');
  for(let attempt=0;attempt<3;attempt++){
   metrics.httpAttempts++;if(attempt)metrics.retries++;
-  let r;try{r=await fetch(ORIGIN+route,{method:body===undefined?'GET':'POST',headers:{'OAI-Sites-Authorization':'Bearer '+token,...(body===undefined?{}:{'Content-Type':binary?'image/png':'application/json'})},body:body===undefined?undefined:binary?body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});}catch{if(body!==undefined||attempt===2)throw Error('NETWORK_FAILURE; read status before repeating a write');await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;}
-  if(r.status===401||r.status===403)throw Error('SITE_AUTH_'+r.status+'; refresh get_site credential once, then stop if repeated');
+  let r;try{r=await fetch(ORIGIN+route,{method:body===undefined?'GET':'POST',headers:{'OAI-Sites-Authorization':'Bearer '+token,'Cookie':'__Host-hunem_service='+serviceTicket,...(body===undefined?{}:{'Content-Type':binary?'image/png':'application/json'})},body:body===undefined?undefined:binary?body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});}catch{if(body!==undefined||attempt===2)throw Error('NETWORK_FAILURE; read status before repeating a write');await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;}
+  if(r.status===401||r.status===403)throw Error('SITE_AUTH_'+r.status+'; check platform credential and owner-issued service ticket; renew expired ticket with authorize; stop if repeated');
   if(body===undefined&&[409,429,502,503,504].includes(r.status)&&attempt<2){await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;}
   if(!r.ok)throw Error('SITE_HTTP_'+r.status);
   return binary&&body===undefined?Buffer.from(await r.arrayBuffer()):await r.json();
@@ -20,8 +20,10 @@ async function request(route,{body,binary=false}={}){
 const pub=(op,extra={})=>request('/api/publication',{body:{op,id:claim?.id,lease:claim?.lease,...extra}});
 async function execute(c){
  const start=Date.now();
- if(c.token){token=c.token;emit({ready:true});return;}
+ if(c.token){token=c.token;if(c.serviceTicket)serviceTicket=c.serviceTicket;emit({ready:true,serviceAuthorized:!!serviceTicket});return;}
+ if(c.cmd==='authorize'&&c.serviceTicket){serviceTicket=c.serviceTicket;emit({serviceAuthorized:true});return;}
  if(!token)throw Error('AUTH_MISSING');
+ if(!serviceTicket)throw Error('SERVICE_TICKET_REQUIRED; obtain hunem_service_ticket from pinned owner MCP');
  if(c.cmd==='stop'){process.exit(0);}
  metrics.commands++;
  let r;

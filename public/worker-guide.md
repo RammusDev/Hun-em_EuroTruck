@@ -1,5 +1,7 @@
 # Hun-em 雲端每日發布 v2
 
+> 每日正式發布沿用原生 MCP prepare／submit／receive image／publish／progress，由本站固定平台擁有者身分驗證；既有唯一排程不變，無須 REST 票證。以下 worker-client 僅為維護通道：需先由原生 hunem_service_ticket 取得限本站5分鐘票證，並以隱藏 stdin 同時傳入 token 與 serviceTicket。票證只送 Cookie __Host-hunem_service；不得保存或輸出。
+
 ## 認證與固定工具
 只操作本私人正式站，不依賴本機，不使用付費模型API或生圖CLI。Sites get_site的siwc_bypass_bearer_token只送本站的 OAI-Sites-Authorization: Bearer <token>；禁止Authorization、匿名試探、轉址或把憑證放檔案／參數／輸出。遇401/403最多重新get_site一次，仍失敗停止，不猜測。
 

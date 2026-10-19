@@ -1,2 +1,2 @@
-import {redirect} from 'next/navigation';
-export default function Page(){redirect('/index.html');}
+import Panel from './access-panel';
+export default function Page(){return <Panel/>}
