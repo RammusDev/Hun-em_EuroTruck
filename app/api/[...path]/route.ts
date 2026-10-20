@@ -51,6 +51,7 @@ export async function POST(req:Request){try{
  if(route==='/api/object')return result(await putObject(u.searchParams.get('key')||'',await req.arrayBuffer()));
  if(route==='/api/publication'){
   const body:any=await req.json();
+  if(body.op==='metrics')return result(await publication(await committed(),'metrics',body));
   if(typeof body.op==='string'&&body.op.startsWith('recovery-')){
    const backup=async(key:string,bytes:string,digest:string)=>{const bucket=env.BUCKET as R2Bucket,old=await bucket.get(key);if(old){if(engine.digest(await old.text())!==digest)throw new Conflict('Recovery backup already exists with different state');}else await bucket.put(key,bytes,{httpMetadata:{contentType:'application/json'}});};
    const imageStore={get:(key:string)=>(env.BUCKET as R2Bucket).get(key),hash:binaryHash,otherHash:(sha:string,key:string)=>(env.DB as D1Database).prepare('SELECT path FROM hunem_objects WHERE sha256=? AND path<>?').bind(sha,key).first()};

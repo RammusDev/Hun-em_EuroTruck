@@ -3,6 +3,7 @@ import {committed,transaction,engine,putObject,getObject,binaryHash} from './run
 import {publication} from './publication';
 import {readPlatformPng} from '../bridge/mcp-file.mjs';
 import {candidateView} from '../bridge/writing-packet.mjs';
+import {publicationMetrics} from '../bridge/publication-metrics.mjs';
 type Session={owner:string;mode:'pilot'|'live';jobId:string;lease:string;day:string;expiresAt:number;payload?:any;now?:number;keyPrefix?:string};
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 function sessionId(id:any){if(typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))throw Error('INVALID_SESSION');return id;}
@@ -51,7 +52,7 @@ export function mcpPublicationHandlers(owner:string){return {
  hunem_publish_journal:async(a:any)=>locked(a.session,owner,s=>perform(s,'publish')),
  hunem_publication_progress:async(a:any)=>{
   const s=await load(a.session,owner),p=s.mode==='pilot'?s.payload:await committed(),job=p.world.publicationJobs.find((j:any)=>j.id===s.jobId),writing=p.cloudWriting?.[s.jobId],image=p.cloudImages?.[s.jobId],candidate=p.cloudCandidates?.[s.jobId];
-  const result:any={scope:s.mode,id:s.jobId,day:s.day,status:job?.status,writingReady:!!writing,imageReady:!!image,published:p.world.diaries.some((d:any)=>d.publication?.id===s.jobId),metrics:p.cloudMetrics?.[s.jobId]||null,formalWorldModified:false};
+  const result:any={scope:s.mode,id:s.jobId,day:s.day,status:job?.status,writingReady:!!writing,imageReady:!!image,published:p.world.diaries.some((d:any)=>d.publication?.id===s.jobId),metrics:job?publicationMetrics(p,job):null,formalWorldModified:false};
   if(image){const object=await getObject(image.key);if(!object)throw Error('IMAGE_MISSING');result.imageSha256=binaryHash(Buffer.from(await object.arrayBuffer()));if(result.imageSha256!==image.sha256)throw Error('IMAGE_HASH_MISMATCH');}
   if(a.includeContent){if(writing)result.writing=candidateView(writing.draft);else if(candidate)result.candidate={draft:candidateView(candidate.draft),review:candidate.review};}
   return result;

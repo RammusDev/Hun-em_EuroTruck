@@ -1,12 +1,30 @@
 import {transaction,getObject,engine,Conflict,binaryHash} from './runtime';
 import {env} from 'cloudflare:workers';
 import {writingPacket,mergeCandidate,candidateView,errorFields} from '../bridge/writing-packet.mjs';
+import {observeOperation,publicationMetrics} from '../bridge/publication-metrics.mjs';
 const minute=60000,root='/hunem/data';
 export async function publication(p:any,op:string,x:any,context:{now?:number,keyPrefix?:string,noFiles?:boolean}={}){
+ const at=context.now??Date.now(),started=performance.now();
+ const result=await publicationCore(p,op,x,context);
+ if(['claim','validate','write','attach','publish','fail'].includes(op)&&(op!=='claim'||result.action==='generate')){
+  const job=p.world.publicationJobs?.find((j:any)=>j.id===(result.id||x.id));
+  if(job){const m=observeOperation(p,job,op,result,{at,serverElapsedMs:Math.round(performance.now()-started)});
+   if(op==='claim'&&result.input)m.packetSectionBytes=Object.fromEntries(Object.entries(result.input).map(([k,v])=>[k,Buffer.byteLength(JSON.stringify(v)??'null')]));
+   if(op==='write'&&result.written)m.writingBytes=Buffer.byteLength(JSON.stringify(engine.writingContent(p.cloudWriting[job.id].draft)));
+  }
+ }
+ return result;
+}
+async function publicationCore(p:any,op:string,x:any,context:{now?:number,keyPrefix?:string,noFiles?:boolean}={}){
  const now=context.now??Date.now(),today=engine.realDay(now);
+ if(op==='metrics'){
+  const day=x.day||today;if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw Error('INVALID_DAY');
+  const j=p.world.publicationJobs?.find((j:any)=>j.day===day);return {day,metrics:j?publicationMetrics(p,j):null};
+ }
  if(op==='verify'){
   const d=p.world.diaries.find((d:any)=>d.day===(x.day||today));
-  return {published:!!d,day:x.day||today,id:d?.publication?.id,title:d?.title,writing:d?.publication?.writing,languages:d?['zh',...['en','de','ja'].filter(l=>d.learning?.[l]?.text)]:[],images:d?.illustrations?.map((a:any)=>({src:a.src,name:a.name})),metrics:p.cloudMetrics?.[d?.publication?.id]||null};
+  const j=p.world.publicationJobs?.find((j:any)=>j.id===d?.publication?.id);
+  return {published:!!d,day:x.day||today,id:d?.publication?.id,title:d?.title,writing:d?.publication?.writing,languages:d?['zh',...['en','de','ja'].filter(l=>d.learning?.[l]?.text)]:[],images:d?.illustrations?.map((a:any)=>({src:a.src,name:a.name})),metrics:j?publicationMetrics(p,j):null};
  }
  const job=p.world.publicationJobs?.find((j:any)=>j.status!=='published'&&j.day===today);
  if(!job)return {action:p.world.diaries.some((d:any)=>d.day===today)?'already-published':'no-work',day:today};
