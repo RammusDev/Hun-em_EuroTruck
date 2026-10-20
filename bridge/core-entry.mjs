@@ -4,7 +4,7 @@ export {getRoute} from '../../lib/routing.mjs';
 export {reconcilePublications,publicationFolder,publicationDeadline,realDay} from '../../lib/publication-queue.mjs';
 export {syncTeaching,readLearning} from '../../lib/language-learning.mjs';
 export {createTopicResearcher,researchAnchor} from '../../lib/topic-research.mjs';
-export {plannedTopicAnchors,topicPolicy} from '../../lib/local-topics.mjs';
+export {actualTopicAnchor,plannedTopicAnchors,topicPolicy} from '../../lib/local-topics.mjs';
 export {albumFromWorld} from '../../lib/album.mjs';
 export {validateDailyWriting,digest,writingContent,writingMode} from '../../lib/daily-writing.mjs';
 export {hydrate,changes,readFileSync,writeFileSync} from './fs.mjs';

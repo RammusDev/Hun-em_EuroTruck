@@ -1,0 +1,12 @@
+{
+  // Deploy only to a separately selected, user-owned external account.
+  "name": "hunem-key-time-timer",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-05-15",
+  "triggers": {
+    // Both CET/CEST candidates; the Worker filters by Europe/Berlin local time.
+    "crons": ["0 7,8 * * *", "30 11,12 * * *", "15 14,15 * * *", "0 21,22 * * *", "30 21,22 * * *"]
+  }
+  // TICK_ENDPOINT, TICK_WORLD_ID and TICK_SECRET must be configured separately.
+  // Never put credentials in this file. This is not a Sites hosting manifest.
+}

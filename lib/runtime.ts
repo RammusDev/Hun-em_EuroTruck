@@ -11,7 +11,7 @@ const hash=(x:any)=>binaryHash(Buffer.isBuffer(x)||typeof x==='string'?x:json(x)
 let queue:Promise<any>=Promise.resolve();
 export class Conflict extends Error {status=409;}
 export async function committed(){for(let i=0;i<3;i++){const row=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('world').first<any>();if(!row)throw new Conflict('世界尚未匯入');const body=await bucket().get(JSON.parse(row.value).key);if(body)return body.json<any>();}throw new Conflict('世界版本切換中，請稍後重試');}
-export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=advance){
+export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=advance,options:{skipCommit?:(result:any)=>boolean}={}){
  const run=async()=>{
   const lease=crypto.randomUUID(),now=Date.now(),row=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING *').bind(lease,now+180000,'world',now).first<any>();
   if(!row)throw new Conflict('世界正在同步，請稍後重試');
@@ -20,7 +20,7 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
    const p=await body.json<any>();core.hydrate(p.files||{});
    process.env.GOOGLE_MAPS_API_KEY=String((env as any).GOOGLE_MAPS_API_KEY||'');process.env.GOOGLE_MAPS_BROWSER_KEY=String((env as any).GOOGLE_MAPS_BROWSER_KEY||'');
    if(advance)await advanceCloud(p,core);
-   const result=await fn(p);if(!commit)return result;Object.assign(p.files,core.changes());
+   const result=await fn(p);if(!commit||options.skipCommit?.(result))return result;Object.assign(p.files,core.changes());
    for(const key of Object.keys(p.files))if(key.endsWith('.tmp'))delete p.files[key];
    const revision=row.revision+1,key=`snapshots/${String(revision).padStart(10,'0')}-${lease}.json`,bytes=json(p);
    await bucket().put(key,bytes,{httpMetadata:{contentType:'application/json'}});
