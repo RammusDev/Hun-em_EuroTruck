@@ -1,4 +1,4 @@
-import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,resetWorld,correctStart,updateDrinkPreferences} from '../../../lib/runtime';
+import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,resetWorld,correctStart,updateDrinkPreferences,binaryHash} from '../../../lib/runtime';
 import {publication} from '../../../lib/publication';
 import {journalRecovery} from '../../../lib/journal-recovery.mjs';
 import {env} from 'cloudflare:workers';
@@ -53,7 +53,8 @@ export async function POST(req:Request){try{
   const body:any=await req.json();
   if(typeof body.op==='string'&&body.op.startsWith('recovery-')){
    const backup=async(key:string,bytes:string,digest:string)=>{const bucket=env.BUCKET as R2Bucket,old=await bucket.get(key);if(old){if(engine.digest(await old.text())!==digest)throw new Conflict('Recovery backup already exists with different state');}else await bucket.put(key,bytes,{httpMetadata:{contentType:'application/json'}});};
-   return result(await transaction(p=>journalRecovery(p,body,{engine,backup}),false,body.op==='recovery-commit',{skipCommit:(r:any)=>r.valid===false||r.reused===true}));
+   const imageStore={get:(key:string)=>(env.BUCKET as R2Bucket).get(key),hash:binaryHash,otherHash:(sha:string,key:string)=>(env.DB as D1Database).prepare('SELECT path FROM hunem_objects WHERE sha256=? AND path<>?').bind(sha,key).first()};
+   return result(await transaction(p=>journalRecovery(p,body,{engine,backup,imageStore}),false,body.op==='recovery-commit',{skipCommit:(r:any)=>r.valid===false||r.reused===true}));
   }
   return result(await transaction(p=>publication(p,body.op,body)));
  }
