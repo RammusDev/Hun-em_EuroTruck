@@ -3,7 +3,7 @@ export function browserState(view){
  const result={...view};
  const bottle=view.sodaLife?.bottle;
  result.heldSoda=bottle?{name:bottle.name,brand:bottle.brand,flavour:bottle.flavour}:null;
- for(const key of ['economy','truck','visits','sodaLife','leisurePlans','tourPlans','journalLegacyGrammarIds'])delete result[key];
+ for(const key of ['pendingMeals','economy','truck','visits','sodaLife','leisurePlans','tourPlans','journalLegacyGrammarIds'])delete result[key];
  if(view.holidayDecisions)result.holidayDecisions=view.holidayDecisions.slice(-1);
  if(view.job){
   const job={...view.job,route:{...view.job.route}};delete job.route.segments;
