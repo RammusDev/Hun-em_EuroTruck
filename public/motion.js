@@ -18,7 +18,21 @@
  }
  const clock=new Intl.DateTimeFormat('en',{timeZone:'Europe/Berlin',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
  function create(s,receivedAt){
-  const speed=Math.max(0,Number(s.speed)||0),elapsed=at=>clamp(at-receivedAt,0,freshness)*speed;
+  if(s.timeline){
+   const t=s.timeline,base=JSON.parse(JSON.stringify(t.base));let index=0,cachedIndex=-1,child;
+   const put=(o,patch)=>{for(const [p,set,v]of patch){let x=o;for(const k of p.slice(0,-1))x=x[k];if(set)x[p.at(-1)]=JSON.parse(JSON.stringify(v));else delete x[p.at(-1)];}return o;};
+   const now=at=>s.serverTime+Math.max(0,at-receivedAt)-t.offset;
+   function view(at){const time=now(at);while(index<t.steps.length&&t.steps[index].at<=time){put(base,t.steps[index].patch);index++;}const v={...base,now:Math.min(time,t.until)};
+    if(time>=t.until){v.status=base.status+' · 等待下一段安排';v.activity={kind:'pending',title:'等待下一段安排',detail:'背景正在準備或重試，畫面不會自行決定行程。'};}
+    return v;
+   }
+   function position(at){const v=view(at);if(now(at)>=t.until)return v.position;
+    if(cachedIndex!==index){cachedIndex=index;child=create({...s,...base,timeline:null,eventProjection:true,speed:1},at-Math.max(0,now(at)-base.now));}
+    return child.position(at);
+   }
+   return {position,view,active:true,expiresAt:Infinity};
+  }
+  const speed=Math.max(0,Number(s.speed)||0),elapsed=at=>clamp(at-receivedAt,0,s.eventProjection?60000:freshness)*speed;
   let sample=()=>s.position,active=false;
   const travel=s.travel,outing=s.outing,job=s.job,j=job?.journey;
   if(travel){

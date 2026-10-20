@@ -20,7 +20,7 @@ test('actual world HTTP route rejects before runtime access and preserves contro
  const get=path=>route.GET(new Request('https://test.site'+path));const post=(path,origin)=>route.POST(new Request('https://test.site'+path,{method:'POST',headers:{origin:origin||'https://test.site'},body:'{}'}));
  assert.equal((await get('/api/state')).status,401);assert.equal(reads+writes,0);
  globalThis.__worldActor=reader;assert.equal((await get('/api/export')).status,403);const committed=await get('/api/state?view=committed');assert.equal((await committed.json()).viewerRole,'reader');assert.equal(reads,1);assert.equal(writes,0);
- const synced=await get('/api/state');const data=await synced.json();assert.equal(writes,1);assert.ok(!('adminToken' in data));assert.equal((await post('/api/publication')).status,403);
+ const synced=await get('/api/state');const data=await synced.json();assert.equal(writes,0);assert.equal(reads,2);assert.ok(!('adminToken' in data));assert.equal((await post('/api/publication')).status,403);
  globalThis.__worldActor=owner;assert.equal((await post('/api/config','https://attacker.test')).status,403);assert.equal((await post('/api/reset-world')).status,403);
  globalThis.__worldActor=service;assert.equal((await get('/api/export')).status,403);assert.equal((await post('/api/object?key=archive/private.png')).status,403);
 });

@@ -166,7 +166,7 @@ function renderDiary(){renderDiaryNavigation();const original=state.diaries.find
 let refreshInFlight=null;
 function refresh(initial=false){
  if(refreshInFlight)return refreshInFlight;
- refreshInFlight=(async()=>{const sequence=++refreshSequence,started=performance.now();try{const r=await fetch(initial?'/api/state?view=committed':'/api/state');if(!r.ok)throw Error('無法取得旅程狀態');const next=await r.json();if(sequence<appliedSequence)return;appliedSequence=sequence;state=next;const received=performance.now();motionFresh=!state.syncPending;motion=motionFresh?HunemMotion.create(state,received-Math.min(1000,(received-started)/2)):null;if(!motionFresh)stopMapAnimation();render();if(state.syncPending)text('status',state.status+' · 正在同步最新旅程');startMapAnimation();}catch(e){if(sequence>=appliedSequence){motionFresh=false;stopMapAnimation();}throw e;}})().finally(()=>{refreshInFlight=null;});
+ refreshInFlight=(async()=>{const sequence=++refreshSequence,started=performance.now();try{const r=await fetch('/api/state?view=committed');if(!r.ok)throw Error('無法取得旅程狀態');const next=await r.json();if(sequence<appliedSequence)return;appliedSequence=sequence;state=next;const received=performance.now();motionFresh=!state.syncPending;motion=motionFresh?HunemMotion.create(state,received-Math.min(1000,(received-started)/2)):null;if(!motionFresh)stopMapAnimation();render();if(state.syncPending)text('status',state.status+' · 正在同步最新旅程');startMapAnimation();}catch(e){if(sequence>=appliedSequence){motionFresh=false;stopMapAnimation();}throw e;}})().finally(()=>{refreshInFlight=null;});
  return refreshInFlight;
 }
 async function control(command){if(busy)return;busy=true;motionFresh=false;stopMapAnimation();document.querySelectorAll('.control-row button,.control-row select').forEach(b=>b.disabled=true);text('message',command.action==='retry-route'?'正在查詢原工作路線，請稍候…':'正在推進共同行程與安排道路，請稍候…');try{const r=await fetch(command.action==='retry-route'?'/api/retry-route':'/api/control',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Token':state.adminToken},body:JSON.stringify(command)});if(!r.ok)throw Error((await r.json()).error);const result=await r.json();if(command.action==='advance'&&result.diaries.length)currentDiary=result.diaries.at(-1).day;await refresh();text('message',command.action==='retry-route'?(state.pendingJob?.error?'查詢未成功，已保存原因與重試狀態。':state.pendingJob?.validatedRoute?'路線已保存，將依正常作息出發。':'路線查詢成功，已接續原工作。'):'已更新，共用旅程已保存。');}catch(e){window.HunemDebug?.record('app-error',{message:e.message,stack:e.stack});text('message',e.message);}finally{busy=false;document.querySelectorAll('.control-row button,.control-row select').forEach(b=>b.disabled=false);renderRouteControls();startMapAnimation();}}
@@ -192,3 +192,5 @@ document.addEventListener('visibilitychange',()=>{stopMapAnimation();motionFresh
 
 
 
+
+setInterval(()=>{if(motionFresh&&motion?.view&&!document.hidden){Object.assign(state,motion.view(performance.now()));render();}},1000);

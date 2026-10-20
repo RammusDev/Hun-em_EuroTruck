@@ -3,7 +3,7 @@ const number=v=>Number.isFinite(v)?v:null;
 const point=v=>Array.isArray(v)&&v.length===2&&v.every(Number.isFinite)?[...v]:null;
 const text=v=>typeof v==='string'?v:null;
 export function journeyStatus(payload,view,observedAt=Date.now()){
- const s=payload.world,o=s.outing,day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(s.now);
+ const s=payload.eventArchitecture?{...payload.world,...view}:payload.world,o=s.outing,day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(s.now);
  const plan=s.tourPlans?.[day]||s.leisurePlans?.[day],a=view.activity;
  const phase=s.operation?'operation':s.mealPause?'meal':a?.kind||view.travel?.mode||(s.job?'work':'rest');
  const stage=s.operation||s.mealPause||o||view.travel;
