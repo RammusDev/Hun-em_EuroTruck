@@ -4,7 +4,7 @@ export async function prepareEventResearch(p,core,real){
  const worker=core.createTopicResearcher('/hunem/data',{now:()=>real,research:(anchor,options)=>core.researchAnchor(anchor,{...options,now:real,fetcher:(url,init)=>fetch(url,{...init,signal:AbortSignal.any([init.signal,AbortSignal.timeout(Math.max(1,deadline-Date.now()))].filter(Boolean))})})});
  const anchors=core.plannedTopicAnchors(p.world);
  await worker.schedule(p.world,{anchors});p.world.localTopicCache=worker.entries;
- const retry=anchors.map(a=>worker.entries[a.key]).filter(e=>e&&(e.scan?.next<e.scan?.total||e.status==='failed'||e.researchIncomplete||e.foodRetryAt<=real)).map(e=>e.retryAt).filter(Number.isFinite);
+ const retry=anchors.map(a=>worker.entries[a.key]).filter(e=>e&&(e.scan?.next<e.scan?.total||e.landmarkStatus==='failed'||e.status==='failed'||e.researchIncomplete||e.foodErrors?.length||e.foodRetryAt<=real)).map(e=>e.retryAt).filter(Number.isFinite);
  p.eventResearch={preparedAt:real,retryAt:retry.length?Math.max(real+60000,Math.min(...retry)):null,anchors:anchors.map(a=>a.key),routeFingerprint:p.world.job?.journey?.routeFingerprint||null};
 }
 export async function runEventClock(p,core,{real=Date.now(),prepare=false}={}){
