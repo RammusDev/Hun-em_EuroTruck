@@ -151,3 +151,8 @@ header{border-bottom-color:#d8ccb5;}
 @media(prefers-reduced-motion:reduce){.log-section .album-open-button .album-button-art{transition:none;}}
 
 .finance-section .ledger-row:last-child{padding-left:68px;}@media(max-width:600px){.finance-section .ledger-row:last-child{padding-left:62px;}}
+
+/* Keep a real frame overlay above the mobile map compositor. */
+.map-frame{isolation:isolate;}
+.map-frame::after{display:none;}
+.map-frame-border{position:absolute;inset:0;display:block;box-sizing:border-box;border:var(--map-frame-size) solid transparent;border-image:url("/site-art/map-frame-medieval-v2.webp") 160 / var(--map-frame-size) / 0 repeat;pointer-events:none;z-index:2;}
