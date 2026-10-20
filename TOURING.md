@@ -27,3 +27,12 @@ visit只在參觀完成後出現；meal_finished只在用餐30分鐘後出現；
 候選來源：lib/touring.mjs、lib/topic-research.mjs、lib/engine-v2.mjs、lib/economy.mjs、public/walk.js與public/app.js。正式來源phase2-world-access包含其打包引擎lib/core.mjs及靜態設定；以scripts/build-background-core.mjs重建，僅同步指定資產，不覆蓋角色、教材或已封存日記。
 
 測試證據：data/touring-tests.log、data/touring-focused.log及data/background-tick-storage/2026-10-20T08-05-04.649Z/report.json。正式世界不快轉、不重設，不重製舊日記。實際自然行程與背景觸發仍需後續觀察，隔離測試不冒充真實每日旅遊驗收。
+
+
+## 2026-10-20 使用者授權的單次切換與面板
+
+使用者明確要求取消今天舊流程的旅館休息安排，從目前位置與時間啟動新版旅遊。正式runtime只在原世界、2026-10-20、弗倫斯堡交貨當日、尚無活動或封存且原計畫為hotel-rest時執行；有效時間至19:00前，其他世界／日期不執行。先以R2 backups/manual-before-city-tour-20261020.json保存完整切換前世界與檔案，再建立新tourPlans，保存tourMigrations.city-tour-20261020收據防重。沒有新增通用改世界端點；交易鎖與CAS沿用正式儲存。
+
+舊leisure_decision標示supersededAt並保留，新增tour_plan_changed與有效外出決定；新日記選最後有效決定。交貨、已吃餐費、休假日期及時間不回退。最初的去程也從切換當刻才開始；不補造上午景點。
+
+snapshot新增activity供主狀態及路線面板共用，明示「Hun-em 今天決定在旅館休息」、候車、正在前往哪裡、參觀、吃飯、返回停車點或已完成旅遊。舊休息日也可顯示明確決定，不再被通用「交貨完成・自由活動」蓋掉。四組新增測試涵蓋遷移安全條件、重複執行、面板狀態及實際前端renderHoliday；另用隔離D1/R2驗證原備份與一次提交。完整179項、站內22項、隔離持久12項、型別及建置通過。瀏覽器自動化基礎設施本次不可用，面板以實際渲染函式驗證。

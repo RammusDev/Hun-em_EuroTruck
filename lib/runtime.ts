@@ -19,7 +19,18 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
    const body=await bucket().get(JSON.parse(row.value).key);if(!body)throw Error('世界快照遺失，禁止建立新世界');
    const p=await body.json<any>();core.hydrate(p.files||{});
    process.env.GOOGLE_MAPS_API_KEY=String((env as any).GOOGLE_MAPS_API_KEY||'');process.env.GOOGLE_MAPS_BROWSER_KEY=String((env as any).GOOGLE_MAPS_BROWSER_KEY||'');
-   if(advance)await advanceCloud(p,core);
+   if(advance){
+    await advanceCloud(p,core);
+    // User-authorized, fixed-world/date migration. Backup precedes all plan changes.
+    const migrationKey=core.tourMigration.id;
+    if(!p.tourMigrations?.[migrationKey]&&core.realDay(Date.now())===core.tourMigration.day&&core.eligibleTourMigration(p.world,core.dateParts(p.world.now))){
+     const backupKey='backups/manual-before-city-tour-20261020.json';
+     if(!(await bucket().get(backupKey)))await bucket().put(backupKey,json({...p,files:{...p.files,...core.changes()}}),{httpMetadata:{contentType:'application/json'}});
+     const receipt=await core.migrateTour(p.world,core.dateParts(p.world.now));
+     if(!receipt.applied)throw new Conflict('旅遊切換條件已改變');
+     p.tourMigrations??={};p.tourMigrations[migrationKey]={...receipt,backupKey};
+    }
+   }
    const result=await fn(p);if(!commit||options.skipCommit?.(result))return result;Object.assign(p.files,core.changes());
    for(const key of Object.keys(p.files))if(key.endsWith('.tmp'))delete p.files[key];
    const revision=row.revision+1,key=`snapshots/${String(revision).padStart(10,'0')}-${lease}.json`,bytes=json(p);
@@ -40,7 +51,7 @@ export async function seed(p:any){
  await db().prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,?,?)').bind('world',json({key,sha256:hash(json(p))}),0,Date.now()).run();
  return {seeded:true,worldTime:p.world.now,diaries:p.world.diaries.length,balance:p.world.balance};
 }
-export function stateView(p:any){return browserState({...core.snapshot(p.world),diaries:p.world.diaries,cities:core.cities,album:core.albumFromWorld(p.world,core.cities),googleKey:String((env as any).GOOGLE_MAPS_BROWSER_KEY||''),adminToken:'private-owner',cloud:true});}
+export function stateView(p:any){return browserState({...core.snapshot(p.world),tourMigration:p.tourMigrations?.[core.tourMigration.id]?{id:core.tourMigration.id,at:p.tourMigrations[core.tourMigration.id].at,backupKey:p.tourMigrations[core.tourMigration.id].backupKey}:null,diaries:p.world.diaries,cities:core.cities,album:core.albumFromWorld(p.world,core.cities),googleKey:String((env as any).GOOGLE_MAPS_BROWSER_KEY||''),adminToken:'private-owner',cloud:true});}
 export async function putObject(key:string,bytes:ArrayBuffer){
  if(!/^(illustrations\/[a-z0-9-]+\.png|generated\/hunem-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}\/[a-z0-9-]+\.png|archive\/[a-zA-Z0-9_./-]+)$/.test(key)||key.includes('..'))throw Error('無效物件路徑');
  const digest=hash(Buffer.from(bytes)),old=await db().prepare('SELECT sha256 FROM hunem_objects WHERE path=?').bind(key).first<any>();if(old&&old.sha256!==digest){const existing=await bucket().get(key);if(!existing||binaryHash(Buffer.from(await existing.arrayBuffer()))!==digest)throw new Conflict('物件已存在且內容不同，禁止覆寫');await db().prepare('UPDATE hunem_objects SET sha256=? WHERE path=?').bind(digest,key).run();}

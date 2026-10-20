@@ -42,6 +42,8 @@ function describeEvent(e){
  if(e.type==='route_failed')return `道路規劃${e.blocked?'待處理':'等待重試'}：${e.error}`;
  if(e.type==='ferry_boarding')return '卡車一起登上渡輪：'+e.name;
  if(e.type==='ferry_arrived')return '渡輪抵岸，先安排完整休息。';
+ if(e.type==='tour_plan_changed')return '今天的旅館休息安排已改為當地旅遊，從切換時間開始活動。';
+ if(e.type==='leisure_decision'&&e.supersededAt)return '原先決定留在旅館休息，之後已改為外出旅遊。';
  if(e.type==='leisure_decision')return e.kind==='hotel-rest'?'今天留在旅館休息。':'今天安排當地景點或街區活動。';
  if(['expense','income','reserve'].includes(e.type))return `${e.label} · ${e.amountCents<0?'−':'+'}€${(Math.abs(e.amountCents)/100).toFixed(2)}`;
  if(e.type==='truck_operation_finished')return {maintenance:'卡車保養完成，準備繼續工作。',refuel:'加油完成，油量足夠才接下一單。',work_break:'車務前的 45 分鐘休息完成。'}[e.operation];
@@ -56,6 +58,7 @@ function describeEvent(e){
  if(e.type==='delivered')return `抵達${city(e.to).name}，完成 ${Math.round(e.km)} km，收入 €${e.reward}。`;
  if(e.type==='break_scheduled')return '停車休息 45 分鐘，重新累計連續駕駛與工作時間。';
  if(e.type==='off_duty')return `${e.restDay||e.weekly?'交貨後休假':'結束工作'} · ${city(e.location).name} · ${e.accommodation}`;
+ if(e.type==='walk_started'&&e.tourId)return `前往下一站：${e.name}，交通與參觀預計 ${Math.round(e.minutes)} 分鐘。`;
  if(e.type==='walk_started')return `${e.transportMode==='passenger'?'搭車前往景點':'附近散步'}：${e.name}，往返與停留共 ${Math.round(e.minutes??90)} 分鐘。`;
  if(e.type==='tour_returned')return '旅遊結束，已返回住宿停車點。';
  if(e.type==='visit'&&e.tourId)return `參觀完成：${e.place.name}。`;
@@ -67,7 +70,8 @@ function renderHoliday(){
  renderJourneyPlan();
  renderPublicationStatus();
  text('holiday-note',`卡車停留：${state.stay?.name||city(state.location).name}${state.holiday?' · '+(state.holiday.local?'在慕尼黑休假':state.holiday.requiresFlight===false?'搭車返家休假':'搭機返家休假'):''}`);
- if(state.travel){text('route-title',state.travel.name);text('cargo','卡車留在'+city(state.location).name+'，Hun-em 正在搭乘交通工具。');text('provider',state.travel.route.provider);text('distance','—');text('reward','—');text('eta','預計 '+time(state.travel.end)+' 完成此段');}
+ if(state.activity&&!state.travel&&!state.job){const a=state.activity;text('route-title',a.title);text('cargo',a.detail);text('provider',a.kind==='hotel-rest'?'今日決定 · 留在旅館休息':'今日活動 · '+(a.target||'當地旅遊'));text('distance','—');text('reward','—');const ends={waiting:'抵達下一站',outbound:'抵達下一站',visit:'參觀結束',meal:'用餐結束',rest:'休息結束',return:'返回停車點','legacy-outing':'行程結束'};text('eta',a.until?'預計 '+time(a.until)+' '+(ends[a.kind]||'完成此段'):'今天的活動安排已保存');}
+ else if(state.travel){text('route-title',state.travel.name);text('cargo','卡車留在'+city(state.location).name+'，Hun-em 正在搭乘交通工具。');text('provider',state.travel.route.provider);text('distance','—');text('reward','—');text('eta','預計 '+time(state.travel.end)+' 完成此段');}
  else if(state.outing?.tourVersion){const o=state.outing,labels={outbound:'抵達下一站',visit:'參觀結束',meal:'用餐結束',rest:'休息結束',return:'返回住宿停車點'};text('route-title',o.place.name);text('cargo',o.phase==='meal'?'旅遊途中用餐 · 預留三十分鐘':o.phase==='return'?'返回住宿停車點；卡車留在原地。':'當地旅遊 · 每站完成後依剩餘時間安排下一站');text('provider',o.transportMode==='passenger'?'模擬大眾運輸 · 含十分鐘候車，非即時班表':'當地步行／停留');text('distance','—');text('reward','—');text('eta','預計 '+time(o.end)+' '+labels[o.phase]);}
  else if(state.outing){const o=state.outing;text('route-title',o.place.name);text('cargo',o.transportMode==='passenger'?'搭車往返，抵達後步行閒逛；卡車留在住宿處。':'住宿處附近步行；卡車留在原地。');text('provider',o.transportMode==='passenger'?'景點交通示意 · 非實際道路或班表':'附近模擬步道');text('distance','—');text('reward','—');text('eta','預計 '+time(o.end)+' 返回住宿處');}
  else if(state.atHome){text('route-title','慕尼黑的家');text('cargo','回家休假中；卡車留在'+city(state.location).name+'。');}
