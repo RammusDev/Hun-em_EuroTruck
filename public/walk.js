@@ -1,6 +1,12 @@
 // Shared deterministic schematic walk. No network, random draws or visit events.
 (() => {
  function plan(outing,origin){
+  if(outing.tourVersion){
+   if(outing.phase==='visit')return plan({...outing,tourVersion:0,transportMode:'walking',roundTripWalkingMinutes:0},outing.place.p);
+   const to=outing.place.p,waitEnd=outing.start+(outing.waitMinutes||0)*60000,moving=['outbound','return'].includes(outing.phase);
+   const legs=moving?[{start:outing.start,end:waitEnd,from:origin,to:origin,kind:'waiting'},{start:waitEnd,end:outing.end,from:origin,to,kind:outing.phase}]:[{start:outing.start,end:outing.end,from:to,to,kind:outing.phase}];
+   return {points:[origin,to],legs,arrive:outing.end,returnAt:outing.end,simulated:true,sample(now){const leg=legs.find(l=>now<l.end)||legs.at(-1),t=Math.max(0,Math.min(1,(now-leg.start)/Math.max(1,leg.end-leg.start)));return {position:leg.from.map((v,k)=>v+(leg.to[k]-v)*t),kind:leg.kind};}};
+  }
   const destination=outing.place.p,duration=outing.end-outing.start;
   const walk=outing.roundTripWalkingMinutes!==undefined?Math.min(.49,outing.roundTripWalkingMinutes/2/(duration/60000)):outing.place.walkingMinutes?Math.min(.45,outing.place.walkingMinutes/2/(duration/60000)):.22;
   const transfer=outing.transportMode==='passenger'?outing.transportMinutesEachWay*60000:duration*walk;
