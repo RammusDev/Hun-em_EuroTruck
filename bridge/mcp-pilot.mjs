@@ -1,7 +1,7 @@
 // No writers, no clock advance, no bearer-token fallback. MCP calls require a
 // platform-authenticated identity. Publication workers remain unchanged.
 export const pilotTools=[
- {name:'hunem_status',description:'Read-only Hun-em cloud status. Does not advance the world or modify data.',inputSchema:{type:'object',properties:{nonce:{type:'string',maxLength:64}},additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},
+ {name:'hunem_status',description:'Read saved Hun-em and truck positions, activity phase and timing, tour/work summary and synchronization lag. Owner-only, read-only committed snapshot; does not advance the world or modify data. Times are Unix milliseconds; lag is time not yet accounted for, not proof of failure.',inputSchema:{type:'object',properties:{nonce:{type:'string',maxLength:64}},additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},
  {name:'hunem_read_writing_packet',description:'Read the newest published journal writing packet, or a compact receipt by default. No unpublished jobs or mutations.',inputSchema:{type:'object',properties:{day:{type:'string',pattern:'^\\d{4}-\\d{2}-\\d{2}$'},includePacket:{type:'boolean',default:false},nonce:{type:'string',maxLength:64}},additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}}
 ];
 export async function pilotRpc(message,{identity,readStatus,readPacket,fileProbe,extraTools=/** @type {any[]} */([]),handlers={}}){
