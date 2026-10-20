@@ -1,5 +1,7 @@
 import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,resetWorld,correctStart,updateDrinkPreferences} from '../../../lib/runtime';
 import {publication} from '../../../lib/publication';
+import {journalRecovery} from '../../../lib/journal-recovery.mjs';
+import {env} from 'cloudflare:workers';
 import {worldActor} from '../../../lib/world-auth';
 // @ts-ignore
 import {authorizeWorld,publicReaderView} from '../../../lib/world-policy.mjs';
@@ -47,7 +49,14 @@ export async function POST(req:Request){try{
  if(route==='/api/reset-world')return result(await resetWorld(await req.json()));
  if(route==='/api/correct-start')return result(await correctStart(await req.json()));
  if(route==='/api/object')return result(await putObject(u.searchParams.get('key')||'',await req.arrayBuffer()));
- if(route==='/api/publication'){const body:any=await req.json();return result(await transaction(p=>publication(p,body.op,body)));}
+ if(route==='/api/publication'){
+  const body:any=await req.json();
+  if(typeof body.op==='string'&&body.op.startsWith('recovery-')){
+   const backup=async(key:string,bytes:string,digest:string)=>{const bucket=env.BUCKET as R2Bucket,old=await bucket.get(key);if(old){if(engine.digest(await old.text())!==digest)throw new Conflict('Recovery backup already exists with different state');}else await bucket.put(key,bytes,{httpMetadata:{contentType:'application/json'}});};
+   return result(await transaction(p=>journalRecovery(p,body,{engine,backup}),false,body.op==='recovery-commit',{skipCommit:(r:any)=>r.valid===false||r.reused===true}));
+  }
+  return result(await transaction(p=>publication(p,body.op,body)));
+ }
  if(route==='/api/retry-route'){if(req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);return result(await transaction(async p=>{await engine.retryPendingRoute(p.world,engine.getRoute);return stateView(p);}));}
  if(route==='/api/debug')return result(await transaction(async p=>({version:1,world:p.world,routes:p.routes,cloud:true}),false));
  if(route==='/api/control')return result({error:'雲端正式世界不提供快轉或變速'},403);
