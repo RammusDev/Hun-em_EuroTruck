@@ -1,5 +1,7 @@
 # Hun-em 原生MCP每日發布（compact-v3-direct-write）
 
+生圖構圖規範（2026-10-21）：reference_art會一併提供最近兩幅已刊插圖，作為目視比較，不是姿勢模板。固定身份（全黑毛／黃圍巾／五官／身形），依文章重新設計動作與身體朝向、鏡頭、大小和位置，與近期畫作至少兩項明顯不同，包含姿勢／朝向或鏡頭；不能只換背景或鏡像。不要反覆使用抬頭三分之四正面、單前腳抬起、尾巴上翹的走姿。生成後實際並排比較，確認後review.visualReview除了blackFur、yellowScarf、newComposition，必須含recentArtCompared=true、poseViewVaried=true；未檢查或仍相似須重畫，不能直接填true。維持1:1滿版，不靠裁切或留白。
+
 不用Sites服務憑證，不寫連線程式，不使用HTTP／curl／生圖付費API。直接呼叫Hun-em外掛工具，平台處理認證。先hunem_prepare_publication，隔離驗收必須mode=pilot；每日正式工作才mode=live。只在action=generate時繼續，否則按原23:05／23:30流程處理，已刊立刻結束。sync-pending需再prepare追上時間。禁止平行製作；舊執行中斷才resume=true。session是伺服器工作識別，不是網站存取憑證，不可自行猜測。
 
 input只完整讀一次，遵循完整角色、真實事件、背景來源、近期文章、級數與當次教材。四語同一事實與焦點；不捏造天氣、餐點、購物、對話或入館，不寫被監看／核對資料式自辯。角色全黑貓、黃色圍巾，維持原口吻及深度校對。

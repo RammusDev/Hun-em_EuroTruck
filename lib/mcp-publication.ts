@@ -2,7 +2,7 @@ import {env} from 'cloudflare:workers';
 import {committed,transaction,engine,putObject,getObject,binaryHash} from './runtime';
 import {publication} from './publication';
 import {readPlatformPng} from '../bridge/mcp-file.mjs';
-import {candidateView,illustrationFormatInstruction} from '../bridge/writing-packet.mjs';
+import {candidateView,illustrationFormatInstruction,illustrationVarietyInstruction} from '../bridge/writing-packet.mjs';
 import {publicationMetrics} from '../bridge/publication-metrics.mjs';
 type Session={owner:string;mode:'pilot'|'live';jobId:string;lease:string;day:string;expiresAt:number;payload?:any;now?:number;keyPrefix?:string};
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
@@ -46,6 +46,7 @@ export function mcpPublicationHandlers(owner:string){return {
    const review={...a.review,sha256:receipt.sha256};
    const payload=s.mode==='pilot'?s.payload:await committed();const job=payload.world.publicationJobs.find((j:any)=>j.id===s.jobId);if(!job||!payload.cloudWriting?.[s.jobId])throw Error('WRITING_REQUIRED');
    if(review.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||!review.originalGeneratedPath||!review.visualReview?.blackFur||!review.visualReview?.yellowScarf||!review.visualReview?.newComposition)throw Error('IMAGE_REVIEW_REQUIRED');
+   if(review.visualReview.recentArtCompared!==true||review.visualReview.poseViewVaried!==true)throw Error('IMAGE_VARIETY_REVIEW_REQUIRED: compare the recent illustrations returned by reference_art; review.visualReview.recentArtCompared and poseViewVaried must be true after actual visual checks. Change pose/body direction or camera angle plus another composition dimension; a background change alone is insufficient.');
    review.inputSha256=binaryHash(JSON.stringify(job.input,null,2));await putObject(key,bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer);
    const attached=await perform(s,'attach',{key,review});return {...attached,bytes:receipt.bytes,scope:s.mode};
   });
@@ -58,7 +59,13 @@ export function mcpPublicationHandlers(owner:string){return {
   if(a.includeContent){if(writing)result.writing=candidateView(writing.draft);else if(candidate)result.candidate={draft:candidateView(candidate.draft),review:candidate.review};}
   return result;
  },
- hunem_reference_art:async(a:any)=>{await load(a.session,owner);const obj=await getObject('illustrations/hunem-reference-v2.png');if(!obj)throw Error('REFERENCE_MISSING');return {content:[{type:'text',text:illustrationFormatInstruction+'\nApproved Hun-em identity reference v2: entirely black fur, golden eyes, yellow scarf with a small blue/ivory diamond shield and gold crown embroidered near the end. Preserve proportions and watercolor style. Change pose and composition to match the completed diary; no required soda or phone. Never reuse the reference as a daily illustration.'},{type:'image',mimeType:'image/png',data:Buffer.from(await obj.arrayBuffer()).toString('base64')}],isError:false};},
+ hunem_reference_art:async(a:any)=>{
+  const s=await load(a.session,owner),obj=await getObject('illustrations/hunem-reference-v2.png');if(!obj)throw Error('REFERENCE_MISSING');
+  const content:any[]=[{type:'text',text:illustrationFormatInstruction+'\n'+illustrationVarietyInstruction+'\nIdentity reference only: entirely black fur, golden eyes, yellow scarf with a small blue/ivory diamond shield and gold crown. Preserve identity and style; do not copy its sitting pose or blank background.'},{type:'image',mimeType:'image/png',data:Buffer.from(await obj.arrayBuffer()).toString('base64')}];
+  const p=await committed(),recent=p.world.diaries.filter((d:any)=>d.day<s.day).sort((a:any,b:any)=>b.day.localeCompare(a.day)).flatMap((d:any)=>(d.illustrations||[]).map((art:any)=>({day:d.day,...art}))).slice(0,2);
+  for(const art of recent){const prior=await getObject(art.src.slice(1));if(!prior)throw Error('RECENT_ART_MISSING');content.push({type:'text',text:`Recent published art ${art.day}: ${art.name}. Compare pose, body direction, camera angle, scale and position. This is comparison material, not a pose template.`},{type:'image',mimeType:'image/png',data:Buffer.from(await prior.arrayBuffer()).toString('base64')});}
+  return {content,isError:false};
+ },
  hunem_finish_without_image:async()=>{const p=await committed(),day=engine.realDay(Date.now()),job=p.world.publicationJobs.find((j:any)=>j.day===day);if(job&&Date.now()<engine.publicationDeadline(job))throw Error('CUTOFF_NOT_REACHED');return transaction(q=>publication(q,'verify',{}));},
  hunem_record_publication_failure:async(a:any)=>{if(typeof a.error!=='string'||a.error.length>500)throw Error('INVALID_ERROR');return locked(a.session,owner,s=>perform(s,'fail',{error:a.error,blocked:!!a.blocked}));}
 };}
