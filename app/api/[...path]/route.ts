@@ -55,7 +55,7 @@ export async function POST(req:Request){try{
   if(typeof body.op==='string'&&body.op.startsWith('recovery-')){
    const backup=async(key:string,bytes:string,digest:string)=>{const bucket=env.BUCKET as R2Bucket,old=await bucket.get(key);if(old){if(engine.digest(await old.text())!==digest)throw new Conflict('Recovery backup already exists with different state');}else await bucket.put(key,bytes,{httpMetadata:{contentType:'application/json'}});};
    const imageStore={get:(key:string)=>(env.BUCKET as R2Bucket).get(key),hash:binaryHash,otherHash:(sha:string,key:string)=>(env.DB as D1Database).prepare('SELECT path FROM hunem_objects WHERE sha256=? AND path<>?').bind(sha,key).first()};
-   return result(await transaction(p=>journalRecovery(p,body,{engine,backup,imageStore}),false,body.op==='recovery-commit',{skipCommit:(r:any)=>r.valid===false||r.reused===true}));
+   return result(await transaction(p=>journalRecovery(p,body,{engine,backup,imageStore}),false,['recovery-commit','recovery-redraw-commit'].includes(body.op),{skipCommit:(r:any)=>r.valid===false||r.reused===true}));
   }
   return result(await transaction(p=>publication(p,body.op,body)));
  }
