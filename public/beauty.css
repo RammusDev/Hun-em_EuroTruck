@@ -156,3 +156,14 @@ header{border-bottom-color:#d8ccb5;}
 .map-frame{isolation:isolate;}
 .map-frame::after{display:none;}
 .map-frame-border{position:absolute;inset:0;display:block;box-sizing:border-box;border:var(--map-frame-size) solid transparent;border-image:url("/site-art/map-frame-medieval-v2.webp") 160 / var(--map-frame-size) / 0 repeat;pointer-events:none;z-index:2;}
+
+ /* Keep the edition and account entry together at the right edge. */
+header{justify-content:flex-start;gap:24px;flex-wrap:wrap;}
+header .edition{margin-left:auto;text-align:right;}
+header>a[href='/account']{flex-shrink:0;}
+@media(max-width:600px){header{gap:12px 18px;}header .brand{flex-basis:100%;}header .edition{margin-left:auto;}}
+.job-card .tag[hidden]{display:none;}
+.job-card dl div[hidden]{display:none;}
+.job-card.activity-only dl{grid-template-columns:minmax(0,1fr);}
+.job-card h3{overflow-wrap:anywhere;word-break:normal;text-wrap:pretty;font-size:clamp(20px,1.6vw,22px);line-height:1.6;}
+.job-card .small-label{font-family:'Noto Sans TC',sans-serif;font-size:11px;letter-spacing:1px;}
