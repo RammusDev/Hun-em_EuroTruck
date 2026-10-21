@@ -8,7 +8,7 @@
  for(const level of ['warn','error']){const original=console[level].bind(console);console[level]=(...args)=>{record('console-'+level,args.map(safe));original(...args);};}
  window.HunemDebug={record};
  const button=document.getElementById('download-debug'),status=document.getElementById('debug-status');
- button.onclick=async()=>{
+ if(button&&status)button.onclick=async()=>{
   button.disabled=true;status.textContent='正在整理除錯資料…';record('download-request',{});
   try{
    const client={url:location.origin+location.pathname,userAgent:navigator.userAgent,language:navigator.language,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,viewport:{width:innerWidth,height:innerHeight,pixelRatio:devicePixelRatio,scrollX,scrollY},online:navigator.onLine,events,view:Object.fromEntries(['clock','status','route-title','catalog-note','message','diary-title','provider','map-error'].map(id=>[id,document.getElementById(id)?.textContent?.slice(0,3000)])),images:[...document.querySelectorAll('#journal-art img')].map(i=>({src:i.getAttribute('src'),complete:i.complete,naturalWidth:i.naturalWidth})),zhuyin:document.getElementById('zhuyin-toggle')?.checked};
