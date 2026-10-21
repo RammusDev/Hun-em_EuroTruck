@@ -221,3 +221,22 @@ header>a[href='/account']{flex-shrink:0;}
 .city-country em{display:block;font-size:10px;color:#897755;font-style:normal}
 .city-directory summary:focus-visible{outline:2px solid #94733d;outline-offset:4px;border-radius:3px}
 @media(max-width:600px){.city-edition{align-items:flex-start;width:100%}.city-directory>summary{text-align:left}.city-directory-panel{right:auto;left:0;max-height:60vh;padding:14px}.city-country ul{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+
+/* Generous touch targets; keep the close action within the scrolling panel. */
+.city-directory{max-width:100%}
+.city-directory>summary{position:relative;min-height:48px;padding:9px 12px 9px 30px;border:1px solid #d8c8a8;border-radius:7px;background:#f5eddb;display:block;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.city-directory>summary::before{content:'▸';position:absolute;left:11px;top:12px}
+.city-directory[open]>summary::before{content:'▾'}
+.city-directory summary::-webkit-details-marker{display:none}
+.city-directory>summary>span{margin:0;display:block}
+.city-directory-panel{overflow-anchor:none;isolation:isolate}
+.city-directory-toolbar{position:sticky;top:-18px;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:12px;margin:-18px -18px 12px;padding:8px 14px;background:#faf3e3;border-bottom:1px solid #ded0b5;color:#655137}
+.city-directory-toolbar strong{font-size:13px;font-weight:500}
+.city-directory-toolbar button{min-height:44px;padding:8px 12px;border:1px solid #cbb68d;border-radius:6px;background:#f5eddb;color:#655137;font:inherit;font-size:13px;cursor:pointer;touch-action:manipulation}
+.city-country>summary{display:flex;align-items:center;gap:8px;min-height:48px;padding:10px 4px;touch-action:manipulation;user-select:none;-webkit-user-select:none;text-align:left}
+.city-country>summary::before{content:'▸';flex:0 0 12px}
+.city-country[open]>summary::before{content:'▾'}
+.city-directory .city-country>summary>span{display:block;float:none;margin:0 0 0 auto;white-space:nowrap}
+.city-country li>span{margin-left:0;text-align:left}
+.city-directory summary:active,.city-directory-toolbar button:active{background:#eaddc2}
+@media(max-width:600px){.city-directory{width:100%}.city-directory>summary{text-align:left}.city-directory-toolbar{top:-14px;margin:-14px -14px 10px;padding:6px 12px}}
