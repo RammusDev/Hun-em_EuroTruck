@@ -176,3 +176,29 @@ header>a[href='/account']{flex-shrink:0;}
 .about-read-less,.about-journey-more[open] .about-read-more{display:none;}
 .about-journey-more[open] .about-read-less{display:inline;}
 @media(max-width:600px){.about-journey{margin:4px 0 26px;padding:18px 20px;}.about-journey h2{font-size:17px;}}
+.intro{align-items:start;}
+.intro>.hero-cat{align-self:start;}
+.intro .about-journey{margin:24px 0 0;padding:18px 0 0;border:0;border-top:1px solid #dcd0ba;background:transparent;}
+.intro .about-journey h2{font-size:18px;letter-spacing:.5px;}
+@media(max-width:800px){.intro .about-journey{margin-top:20px;}.intro>.hero-cat{margin-top:18px;}}
+@media(min-width:1101px){.map-wrap>.map-frame-title{height:26px;line-height:14px;padding-bottom:12px;}.travel-grid>.job-card{margin-top:26px;}}
+.travel-pocket-row{display:grid;grid-template-columns:minmax(0,1fr) 100px;align-items:center;gap:12px;margin-top:16px;}
+.travel-pocket-row>.finance-summary{min-width:0;margin:0;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.travel-pocket-row>.finance-summary>div{min-width:0;padding:16px 12px;background:#f8f3e7;border:1px solid #ded2ba;border-radius:3px;box-shadow:none;}
+.travel-pocket-row>.finance-summary strong{font-size:20px;overflow-wrap:anywhere;}
+.travel-pocket-row>.finance-summary>div::after{border:0;border-image:none;inset:5px auto auto 5px;width:9px;height:9px;border-left:1px solid #b9a77f;border-top:1px solid #b9a77f;}
+.travel-pocket-row>.finance-summary span{color:#75664e;font-size:11px;margin-bottom:6px;}
+.travel-pocket-row>.finance-summary .soda-summary strong{font-size:14px;line-height:1.6;}
+.travel-pocket-row>.album-open-button{min-width:0;width:100%;display:flex;flex-direction:column;gap:0;padding:0;background:transparent;border:0;box-shadow:none;color:#78664a;}
+.travel-pocket-row .album-button-art{display:block;width:100%;max-width:100px;height:auto;object-fit:contain;}
+.travel-pocket-row .album-open-button small{font-size:11px;margin:0;line-height:1.8;color:#78664a;}
+.travel-pocket-row .album-open-button:focus-visible{outline:2px solid #8d744a;outline-offset:4px;}
+@media(max-width:700px){.travel-pocket-row{grid-template-columns:minmax(0,1fr);gap:10px;margin-top:12px;}.travel-pocket-row>.finance-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}.travel-pocket-row .soda-summary{grid-column:1/-1;}.travel-pocket-row>.album-open-button{width:90px;justify-self:end;}}
+.travel-pocket-row>.finance-summary>div{display:flex;flex-direction:column;align-items:center;text-align:center;background:transparent;border:0;padding:0 6px;}
+.travel-pocket-row>.finance-summary>div::after{display:none;}
+.travel-pocket-row .pocket-icon{display:block;width:100%;max-width:100px;height:70px;object-fit:contain;margin-bottom:8px;}
+.travel-pocket-row>.album-open-button{align-self:start;}
+.travel-pocket-row .album-button-art{height:70px;margin-bottom:8px;}
+.travel-pocket-row .soda-flavour{overflow-wrap:anywhere;}
+.intro .about-journey{margin-top:0;padding-top:0;border-top:0;}
+.intro .about-journey h1{font-size:clamp(27px,2.6vw,38px);line-height:1.6;letter-spacing:1px;text-wrap:balance;}
