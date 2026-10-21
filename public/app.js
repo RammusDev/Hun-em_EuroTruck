@@ -136,6 +136,9 @@ function ledgerIcon(t){
  return 'receipt';
 }
 function renderFinance(){
+ const financeKey=JSON.stringify([state.finance,state.heldSoda??state.sodaLife?.bottle]);
+ if(renderFinance.lastKey===financeKey)return;
+ renderFinance.lastKey=financeKey;
  const f=state.finance,summary=$('finance-summary'),ledger=$('ledger');summary.replaceChildren();ledger.replaceChildren();if(!f){summary.textContent='帳本準備中…';return;}
  const euro=n=>'€'+(n/100).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
  const held=state.heldSoda??state.sodaLife?.bottle;
