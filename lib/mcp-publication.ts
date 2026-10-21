@@ -2,7 +2,7 @@ import {env} from 'cloudflare:workers';
 import {committed,transaction,engine,putObject,getObject,binaryHash} from './runtime';
 import {publication} from './publication';
 import {readPlatformPng} from '../bridge/mcp-file.mjs';
-import {candidateView} from '../bridge/writing-packet.mjs';
+import {candidateView,illustrationFormatInstruction} from '../bridge/writing-packet.mjs';
 import {publicationMetrics} from '../bridge/publication-metrics.mjs';
 type Session={owner:string;mode:'pilot'|'live';jobId:string;lease:string;day:string;expiresAt:number;payload?:any;now?:number;keyPrefix?:string};
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
@@ -39,6 +39,7 @@ export function mcpPublicationHandlers(owner:string){return {
  hunem_receive_illustration:async(a:any)=>{
   const initial=await load(a.session,owner);assertObject(a.review);
   const {bytes,receipt}=await readPlatformPng(a.file);
+  if(bytes.readUInt32BE(16)!==bytes.readUInt32BE(20))throw Error('IMAGE_FORMAT_REQUIRED: use a square 1:1 PNG matching the first album artwork; generate again without padding or cropping.');
   return locked(a.session,owner,async s=>{
    if(s.mode!==initial.mode)throw Error('SESSION_CONFLICT');
    const key=s.keyPrefix?s.keyPrefix+'/daily-sketch.png':`generated/${s.jobId}/daily-sketch.png`;
@@ -57,7 +58,7 @@ export function mcpPublicationHandlers(owner:string){return {
   if(a.includeContent){if(writing)result.writing=candidateView(writing.draft);else if(candidate)result.candidate={draft:candidateView(candidate.draft),review:candidate.review};}
   return result;
  },
- hunem_reference_art:async(a:any)=>{await load(a.session,owner);const obj=await getObject('illustrations/hunem-reference-v2.png');if(!obj)throw Error('REFERENCE_MISSING');return {content:[{type:'text',text:'Approved Hun-em identity reference v2: entirely black fur, golden eyes, yellow scarf with a small blue/ivory diamond shield and gold crown embroidered near the end. Preserve proportions and watercolor style. Change pose and composition to match the completed diary; no required soda or phone. Never reuse the reference as a daily illustration.'},{type:'image',mimeType:'image/png',data:Buffer.from(await obj.arrayBuffer()).toString('base64')}],isError:false};},
+ hunem_reference_art:async(a:any)=>{await load(a.session,owner);const obj=await getObject('illustrations/hunem-reference-v2.png');if(!obj)throw Error('REFERENCE_MISSING');return {content:[{type:'text',text:illustrationFormatInstruction+'\nApproved Hun-em identity reference v2: entirely black fur, golden eyes, yellow scarf with a small blue/ivory diamond shield and gold crown embroidered near the end. Preserve proportions and watercolor style. Change pose and composition to match the completed diary; no required soda or phone. Never reuse the reference as a daily illustration.'},{type:'image',mimeType:'image/png',data:Buffer.from(await obj.arrayBuffer()).toString('base64')}],isError:false};},
  hunem_finish_without_image:async()=>{const p=await committed(),day=engine.realDay(Date.now()),job=p.world.publicationJobs.find((j:any)=>j.day===day);if(job&&Date.now()<engine.publicationDeadline(job))throw Error('CUTOFF_NOT_REACHED');return transaction(q=>publication(q,'verify',{}));},
  hunem_record_publication_failure:async(a:any)=>{if(typeof a.error!=='string'||a.error.length>500)throw Error('INVALID_ERROR');return locked(a.session,owner,s=>perform(s,'fail',{error:a.error,blocked:!!a.blocked}));}
 };}

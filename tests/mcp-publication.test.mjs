@@ -20,6 +20,12 @@ test('native MCP pilot validates, attaches and publishes independently of the fo
  assert.equal((await h.hunem_submit_writing({session:c.session,action:'validate',patch:{learning:{de:{words:['truck：卡車','walk：散步','afternoon：下午']}}}})).valid,true);
  assert.equal((await h.hunem_submit_writing({session:c.session,action:'write'})).written,true);
  assert.equal((await h.hunem_publication_progress({session:c.session,includeContent:true})).writing.zh,d.zh);
+ objects.set('illustrations/hunem-reference-v2.png',readFileSync('D:/Work/Hum-em_EuroTruck/public/illustrations/hunem-reference-v2.png'));
+ const ref=await h.hunem_reference_art({session:c.session});assert.match(ref.content[0].text,/1:1/);assert.match(c.input.imageRequests[0].instruction,/1254×1254/);
+ const landscape=readFileSync('D:/Work/Hum-em_EuroTruck/data/journal-recovery-20261019/daily-sketch.png'),savedFetch=globalThis.fetch,beforeImages=images.size;
+ globalThis.fetch=async()=>new Response(landscape);
+ try{await assert.rejects(h.hunem_receive_illustration({session:c.session,file:{file_id:'landscape-fixture',download_url:'https://files.oaiusercontent.com/landscape-fixture'},review:{}}),/IMAGE_FORMAT_REQUIRED/);}finally{globalThis.fetch=savedFetch;}
+ assert.equal(images.size,beforeImages);assert.equal((await h.hunem_publication_progress({session:c.session})).imageReady,false);
  const png=readFileSync('D:/Work/Hum-em_EuroTruck/public/illustrations/munich.png'),originalFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(png);
  try{const attached=await h.hunem_receive_illustration({session:c.session,file:{file_id:'test-fixture-not-real-imagegen',download_url:'https://files.oaiusercontent.com/isolated-fixture'},review:{tool:'image_gen.imagegen',actuallyCalled:true,originalGeneratedPath:'synthetic-unit-test-only',visualReview:{blackFur:true,yellowScarf:true,newComposition:true}}});assert.equal(attached.attached,true);}finally{globalThis.fetch=originalFetch;}
  assert.equal((await h.hunem_publish_journal({session:c.session})).published,true);
