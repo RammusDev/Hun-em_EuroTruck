@@ -4,6 +4,7 @@ import {publication} from './publication';
 import {readPlatformPng} from '../bridge/mcp-file.mjs';
 import {candidateView,illustrationFormatInstruction,illustrationVarietyInstruction} from '../bridge/writing-packet.mjs';
 import {publicationMetrics} from '../bridge/publication-metrics.mjs';
+import {cachedReferencePreview} from '../bridge/reference-preview.mjs';
 type Session={owner:string;mode:'pilot'|'live';jobId:string;lease:string;day:string;expiresAt:number;payload?:any;now?:number;keyPrefix?:string};
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 function sessionId(id:any){if(typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))throw Error('INVALID_SESSION');return id;}
@@ -63,7 +64,11 @@ export function mcpPublicationHandlers(owner:string){return {
   const s=await load(a.session,owner),obj=await getObject('illustrations/hunem-reference-v2.png');if(!obj)throw Error('REFERENCE_MISSING');
   const content:any[]=[{type:'text',text:illustrationFormatInstruction+'\n'+illustrationVarietyInstruction+'\nIdentity reference only: entirely black fur, golden eyes, yellow scarf with a small blue/ivory diamond shield and gold crown. Preserve identity and style; do not copy its sitting pose or blank background.'},{type:'image',mimeType:'image/png',data:Buffer.from(await obj.arrayBuffer()).toString('base64')}];
   const p=await committed(),recent=p.world.diaries.filter((d:any)=>d.day<s.day).sort((a:any,b:any)=>b.day.localeCompare(a.day)).flatMap((d:any)=>(d.illustrations||[]).map((art:any)=>({day:d.day,...art}))).slice(0,2);
-  for(const art of recent){const prior=await getObject(art.src.slice(1));if(!prior)throw Error('RECENT_ART_MISSING');content.push({type:'text',text:`Recent published art ${art.day}: ${art.name}. Compare pose, body direction, camera angle, scale and position. This is comparison material, not a pose template.`},{type:'image',mimeType:'image/png',data:Buffer.from(await prior.arrayBuffer()).toString('base64')});}
+  for(const art of recent){
+   const prior=await getObject(art.src.slice(1));if(!prior)throw Error('RECENT_ART_MISSING');
+   const preview=await cachedReferencePreview(Buffer.from(await prior.arrayBuffer()),{get:(key:string)=>bucket().get(key),put:(key:string,data:any,options:any)=>bucket().put(key,data,options)});
+   content.push({type:'text',text:`Recent published art ${art.day}: ${art.name}. Compressed JPEG preview (longest edge <=512px), for pose/body direction, camera angle, scale and position comparison only. Full published original is unchanged. This is comparison material, not a pose template. sourceBytes=${preview.originalBytes}, previewBytes=${preview.bytes.length}.`},{type:'image',mimeType:preview.mimeType,data:Buffer.from(preview.bytes).toString('base64')});
+  }
   return {content,isError:false};
  },
  hunem_finish_without_image:async()=>{const p=await committed(),day=engine.realDay(Date.now()),job=p.world.publicationJobs.find((j:any)=>j.day===day);if(job&&Date.now()<engine.publicationDeadline(job))throw Error('CUTOFF_NOT_REACHED');return transaction(q=>publication(q,'verify',{}));},
