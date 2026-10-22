@@ -2,7 +2,7 @@ import {env} from 'cloudflare:workers';
 import {committed,transaction,engine,putObject,getObject,binaryHash} from './runtime';
 import {publication} from './publication';
 import {readPlatformPng} from '../bridge/mcp-file.mjs';
-import {candidateView,illustrationFormatInstruction,illustrationVarietyInstruction} from '../bridge/writing-packet.mjs';
+import {candidateView,illustrationFormatInstruction,illustrationVarietyInstruction,illustrationSceneInstruction} from '../bridge/writing-packet.mjs';
 import {publicationMetrics} from '../bridge/publication-metrics.mjs';
 import {cachedReferencePreview} from '../bridge/reference-preview.mjs';
 type Session={owner:string;mode:'pilot'|'live';jobId:string;lease:string;day:string;expiresAt:number;payload?:any;now?:number;keyPrefix?:string};
@@ -62,7 +62,7 @@ export function mcpPublicationHandlers(owner:string){return {
  },
  hunem_reference_art:async(a:any)=>{
   const s=await load(a.session,owner),obj=await getObject('illustrations/hunem-reference-v2.png');if(!obj)throw Error('REFERENCE_MISSING');
-  const content:any[]=[{type:'text',text:illustrationFormatInstruction+'\n'+illustrationVarietyInstruction+'\nIdentity reference only: entirely black fur, golden eyes, yellow scarf with a small blue/ivory diamond shield and gold crown. Preserve identity and style; do not copy its sitting pose or blank background.'},{type:'image',mimeType:'image/png',data:Buffer.from(await obj.arrayBuffer()).toString('base64')}];
+  const content:any[]=[{type:'text',text:illustrationFormatInstruction+'\n'+illustrationVarietyInstruction+'\n'+illustrationSceneInstruction+'\nIdentity reference only: entirely black fur, golden eyes, yellow scarf with a small blue/ivory diamond shield and gold crown. Preserve identity and style; do not copy its sitting pose or blank background.'},{type:'image',mimeType:'image/png',data:Buffer.from(await obj.arrayBuffer()).toString('base64')}];
   const p=await committed(),recent=p.world.diaries.filter((d:any)=>d.day<s.day).sort((a:any,b:any)=>b.day.localeCompare(a.day)).flatMap((d:any)=>(d.illustrations||[]).map((art:any)=>({day:d.day,...art}))).slice(0,2);
   for(const art of recent){
    const prior=await getObject(art.src.slice(1));if(!prior)throw Error('RECENT_ART_MISSING');

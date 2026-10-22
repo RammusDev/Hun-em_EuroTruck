@@ -9,5 +9,6 @@ test('whole-day and single-scene rules reach writing packets without mutating ar
  const original=structuredClone(input),p=writingPacket(input);
  assert.ok(p.writingInstruction.includes(dailyCoverageInstruction));assert.match(p.writingInstruction,/上午、下午、晚間/);assert.match(p.writingInstruction,/仍只畫一張/);
  assert.deepEqual(input,original);assert.deepEqual(p.events.map(e=>e.type),input.events.map(e=>e.type));assert.equal(p.imageRequests.length,input.imageRequests.length);
+ assert.match(p.imageRequests[0].instruction,/具地方辨識度或故事意義/);assert.match(p.imageRequests[0].instruction,/不能只當模糊遠景/);
  const newer={...input,writingInstruction:p.writingInstruction};assert.equal(writingPacket(newer).writingInstruction,p.writingInstruction);
 });
