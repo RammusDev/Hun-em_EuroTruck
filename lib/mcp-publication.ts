@@ -5,6 +5,7 @@ import {readPlatformPng} from '../bridge/mcp-file.mjs';
 import {candidateView,illustrationFormatInstruction,illustrationVarietyInstruction,illustrationSceneInstruction} from '../bridge/writing-packet.mjs';
 import {publicationMetrics} from '../bridge/publication-metrics.mjs';
 import {cachedReferencePreview} from '../bridge/reference-preview.mjs';
+import {recordToolFailure} from './monitor-store.mjs';
 type Session={owner:string;mode:'pilot'|'live';jobId:string;lease:string;day:string;expiresAt:number;payload?:any;now?:number;keyPrefix?:string};
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 function sessionId(id:any){if(typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))throw Error('INVALID_SESSION');return id;}
@@ -19,7 +20,7 @@ async function perform(s:Session,op:string,args:any={}){
  return transaction(p=>publication(p,op,{...args,id:s.jobId,lease:s.lease}));
 }
 function assertObject(x:any){if(!x||typeof x!=='object'||Array.isArray(x))throw Error('INVALID_ARGUMENTS');}
-export function mcpPublicationHandlers(owner:string){return {
+export function mcpPublicationHandlers(owner:string){const handlers={
  hunem_prepare_publication:async(a:any)=>{
   if(!['pilot','live'].includes(a.mode))throw Error('INVALID_MODE');
   let s:Session,c:any;
@@ -73,4 +74,13 @@ export function mcpPublicationHandlers(owner:string){return {
  },
  hunem_finish_without_image:async()=>{const p=await committed(),day=engine.realDay(Date.now()),job=p.world.publicationJobs.find((j:any)=>j.day===day);if(job&&Date.now()<engine.publicationDeadline(job))throw Error('CUTOFF_NOT_REACHED');return transaction(q=>publication(q,'verify',{}));},
  hunem_record_publication_failure:async(a:any)=>{if(typeof a.error!=='string'||a.error.length>500)throw Error('INVALID_ERROR');return locked(a.session,owner,s=>perform(s,'fail',{error:a.error,blocked:!!a.blocked}));}
-};}
+};return Object.fromEntries(Object.entries(handlers).map(([name,handler])=>[name,async(a:any)=>{
+ try{return await handler(a);}catch(error){
+  // Keep pilot runs isolated. Record only classified failures; no credentials or raw tool payloads.
+  try{
+   if(a?.session){const s=await load(a.session,owner);if(s.mode==='live')await recordToolFailure(db(),s.jobId,name,error);}
+   else if(a?.mode==='live'){const p=await committed(),job=p.world.publicationJobs?.find((j:any)=>j.day===engine.realDay(Date.now()));if(job)await recordToolFailure(db(),job.id,name,error);}
+  }catch{console.log('monitor-tool-failure-record-unavailable');}
+  throw error;
+ }
+}]));}

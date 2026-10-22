@@ -1,12 +1,13 @@
 import {env} from 'cloudflare:workers';
-import {transaction,engine,committed} from './runtime';
+import {transaction,engine,committed,stateView} from './runtime';
+import {runMonitor} from './monitor-store.mjs';
 import {advanceCloud} from '../bridge/advance.mjs';
 import {verifyBackground} from './background-auth.mjs';
 import {runEventClock,eventSchedule} from '../bridge/event-runtime.mjs';
 
 export async function backgroundTick(req:Request){
  const now=Date.now(),args=await verifyBackground(req,env,now);
- if(args.health){const p=await committed();return {worldId:args.worldId,action:'health',now:p.world.now,...eventSchedule(p)};}
+ if(args.health){const p=await committed();try{await runMonitor(p,stateView(p),env);}catch{console.log('monitor-check-failed');}return {worldId:args.worldId,action:'health',now:p.world.now,...eventSchedule(p)};}
  // The receipt and updated world are committed by the same existing D1 CAS.
  // A failed computation/commit cannot consume a request ID permanently.
  return transaction(async(p:any)=>{

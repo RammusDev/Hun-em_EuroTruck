@@ -1,4 +1,5 @@
 'use client';
+import MonitorPanel from './monitor-panel';
 import {ArrowRight,Check,Mail,ShieldCheck,Users,Clock3,LogOut,RefreshCw,Settings2,Inbox,BookOpen,Send,LockKeyhole} from 'lucide-react';
 const labels:Record<string,string>={unrequested:'尚未申請',pending:'等待審核',approved:'已核准',rejected:'未核准',revoked:'已撤銷'};
 const mailLabels:Record<string,string>={accepted:'Gmail 已受理',pending:'等候寄送',failed:'寄送失敗',review:'需要確認',sending:'寄送中',cancelled:'已取消'};
@@ -16,6 +17,7 @@ export default function AccessView({admin,me,data,error,notice,busy,reason,setRe
    {admin?<>
     <div className="access-heading"><div><p className="access-eyebrow">THE READERS’ DESK</p><h1>觀看權限管理</h1><p className="access-subtitle">為這段旅程，留一扇剛剛好的門。</p></div>{me?.owner?<div className="access-owner"><span className="access-avatar">{me.email?.[0]?.toUpperCase()}</span><span><strong>擁有者</strong><small>{me.email}</small></span><ShieldCheck size={17}/></div>:null}</div>
     {!me?<div className="access-loading" role="status"><span className="access-spinner"/>正在整理讀者名單…</div>:me.signedOut?<section className="access-paper access-empty"><LockKeyhole size={28}/><h2>先確認你的管理身分</h2><p>使用擁有者的 Google 帳號登入，查看申請與讀者名單。</p><a className="access-button primary" href="/probe/login">使用 Google 登入<ArrowRight size={16}/></a></section>:!me.owner?<section className="access-paper access-empty"><LockKeyhole size={28}/><h2>這張書桌留給擁有者</h2><p>你的觀看資格不受影響，可以回到旅途日記。</p><a className="access-button secondary" href="/account">返回我的帳號<ArrowRight size={16}/></a></section>:<>
+     {data?<MonitorPanel/>:null}
      <div className="access-stats"><div><span><Clock3 size={17}/>待審申請</span><strong>{data?pending:'—'}<small>位等待回覆</small></strong></div><div><span><Users size={17}/>已核准讀者</span><strong>{data?approved:'—'}<small>位同行讀者</small></strong></div><div><span><ShieldCheck size={17}/>讀者名額</span><strong>{data?data.capacity:'—'}<small>位 · 不含擁有者</small></strong></div></div>
      {!data?<section className="access-paper access-empty"><LockKeyhole size={26}/><h2>請重新確認管理身分</h2><p>管理操作需要最近 30 分鐘內登入。</p><a className="access-button primary" href="/probe/login">重新使用 Google 登入<ArrowRight size={16}/></a></section>:<div className="access-admin-grid">
       <section className="access-paper access-roster"><div className="access-section-title"><div><p className="access-eyebrow">PEOPLE ON THIS JOURNEY</p><h2>申請與讀者</h2></div><button className="access-icon-button" aria-label="重新整理讀者名單" disabled={busy} onClick={refresh}><RefreshCw size={17}/></button></div>

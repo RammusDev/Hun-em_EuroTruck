@@ -3,6 +3,7 @@ import {publication} from '../../../lib/publication';
 import {journalRecovery} from '../../../lib/journal-recovery.mjs';
 import {env} from 'cloudflare:workers';
 import {worldActor} from '../../../lib/world-auth';
+import {readMonitor,setMonitorEmail,runMonitor} from '../../../lib/monitor-store.mjs';
 // @ts-ignore
 import {authorizeWorld,publicReaderView} from '../../../lib/world-policy.mjs';
 export const dynamic='force-dynamic';
@@ -11,6 +12,7 @@ export async function GET(req:Request){try{
  const route=new URL(req.url).pathname;
  const role=authorizeWorld(await worldActor(req),'GET',route);
  const view=(p:any)=>role==='reader'?publicReaderView(stateView(p)):{...stateView(p),viewerRole:role};
+ if(route==='/api/monitor'){const p=await committed();return result(await readMonitor(p,stateView(p),env));}
  if(route==='/api/state')return result({...view(await committed()),syncPending:false});
  if(route==='/api/state'){try{return result(await transaction(async p=>view(p)));}catch(e){if(!(e instanceof Conflict))throw e;return result({...view(await committed()),syncPending:true});}}
  if(route==='/api/health')return result({service:'hun-em',clock:'Europe/Berlin',storage:'D1 + R2'});
@@ -29,6 +31,11 @@ export async function POST(req:Request){try{
  if(actor?.role==='service'&&route==='/api/object'&&!/^generated\/hunem-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}\/[a-z0-9-]+\.png$/.test(u.searchParams.get('key')||''))return result({error:'Service upload scope denied'},403);
  if(actor?.role!=='service'&&req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);
  if(req.headers.get('origin')&&req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);
+ if(route==='/api/monitor'){
+  const body:any=await req.json();if(typeof body.emailEnabled!=='boolean')return result({error:'Invalid setting'},400);
+  const setting=await setMonitorEmail(env.DB,body.emailEnabled);
+  const p=await committed();await runMonitor(p,stateView(p),env,{force:true});return result(setting);
+ }
  if(route==='/api/update-drink-preferences')return result(await updateDrinkPreferences());
  if(route==='/api/config'){
   const config:any=await req.json();return result(await transaction(async p=>{
