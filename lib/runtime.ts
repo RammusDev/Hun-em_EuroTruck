@@ -56,7 +56,10 @@ export async function seed(p:any){
  await db().prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,?,?)').bind('world',json({key,sha256:hash(json(p))}),0,Date.now()).run();
  return {seeded:true,worldTime:p.world.now,diaries:p.world.diaries.length,balance:p.world.balance};
 }
-export function stateView(p:any){return browserState({...core.snapshot(p.world),...(p.eventArchitecture?{...core.projectPlan(p,Date.now()),timeline:core.publicTimeline(p.eventPlan),serverTime:Date.now(),eventArchitecture:true}:{}),tourMigration:p.tourMigrations?.[core.tourMigration.id]?{id:core.tourMigration.id,at:p.tourMigrations[core.tourMigration.id].at,backupKey:p.tourMigrations[core.tourMigration.id].backupKey}:null,diaries:p.world.diaries,cities:core.cities,album:core.albumFromWorld(p.world,core.cities),googleKey:String((env as any).GOOGLE_MAPS_BROWSER_KEY||''),adminToken:'private-owner',cloud:true});}
+export function stateView(p:any){
+ const view={...core.snapshot(p.world),...(p.eventArchitecture?{...core.projectPlan(p,Date.now()),timeline:core.publicTimeline(p.eventPlan),serverTime:Date.now(),eventArchitecture:true}:{})};
+ return browserState({...view,tourMigration:p.tourMigrations?.[core.tourMigration.id]?{id:core.tourMigration.id,at:p.tourMigrations[core.tourMigration.id].at,backupKey:p.tourMigrations[core.tourMigration.id].backupKey}:null,diaries:p.world.diaries,cities:core.cities,album:core.albumFromWorld({...p.world,now:view.now},core.cities),googleKey:String((env as any).GOOGLE_MAPS_BROWSER_KEY||''),adminToken:'private-owner',cloud:true});
+}
 export async function putObject(key:string,bytes:ArrayBuffer){
  if(!/^(illustrations\/[a-z0-9-]+\.png|generated\/hunem-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}\/[a-z0-9-]+\.png|archive\/[a-zA-Z0-9_./-]+)$/.test(key)||key.includes('..'))throw Error('無效物件路徑');
  const digest=hash(Buffer.from(bytes)),old=await db().prepare('SELECT sha256 FROM hunem_objects WHERE path=?').bind(key).first<any>();if(old&&old.sha256!==digest){const existing=await bucket().get(key);if(!existing||binaryHash(Buffer.from(await existing.arrayBuffer()))!==digest)throw new Conflict('物件已存在且內容不同，禁止覆寫');await db().prepare('UPDATE hunem_objects SET sha256=? WHERE path=?').bind(digest,key).run();}
