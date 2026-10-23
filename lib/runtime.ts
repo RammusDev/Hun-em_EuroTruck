@@ -21,6 +21,10 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
    const p=await body.json<any>();core.hydrate(p.files||{});
    process.env.GOOGLE_MAPS_API_KEY=String((env as any).GOOGLE_MAPS_API_KEY||'');process.env.GOOGLE_MAPS_BROWSER_KEY=String((env as any).GOOGLE_MAPS_BROWSER_KEY||'');
    if(advance){
+    if(p.eventPlan?.events?.some((e:any)=>e.dueAt<now-10*60000)){
+     const recoveryKey='backups/manual-before-event-recovery-'+core.realDay(now)+'.json';
+     if(!(await bucket().get(recoveryKey)))await bucket().put(recoveryKey,json(p));
+    }
     if(p.eventArchitecture)await runEventClock(p,core);else await advanceCloud(p,core);
     // User-authorized, fixed-world/date migration. Backup precedes all plan changes.
     const migrationKey=core.tourMigration.id;

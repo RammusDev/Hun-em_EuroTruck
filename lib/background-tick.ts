@@ -26,6 +26,10 @@ export async function backgroundTick(req:Request){
     if(event.dueAt>now)throw Object.assign(Error('Event is not due'),{status:409});
    }
    const due=args.event?p.eventPlan.events.find((e:any)=>e.id===args.event.id):null;
+   if(p.eventPlan?.events?.some((e:any)=>e.dueAt<now-10*60000)){
+    const bucket=env.BUCKET as R2Bucket,key='backups/manual-before-event-recovery-'+engine.realDay(now)+'.json';
+    if(!(await bucket.get(key)))await bucket.put(key,JSON.stringify(p));
+   }
    const schedule=await runEventClock(p,engine,{real:now,prepare:!args.event||due?.kind==='prepare'});
    if(args.event)p.eventReceipts[args.event.id]={at:now,version:args.event.version};
    const keys=Object.keys(p.eventReceipts);for(const key of keys.slice(0,Math.max(0,keys.length-2048)))delete p.eventReceipts[key];
