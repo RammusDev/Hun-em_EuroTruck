@@ -7,7 +7,8 @@ export async function prepareEventResearch(p,core,real){
  const retry=anchors.map(a=>worker.entries[a.key]).filter(e=>e&&(e.scan?.next<e.scan?.total||e.landmarkStatus==='failed'||e.status==='failed'||e.researchIncomplete||e.foodErrors?.length||e.foodRetryAt<=real)).map(e=>e.retryAt).filter(Number.isFinite);
  p.eventResearch={preparedAt:real,retryAt:retry.length?Math.max(real+60000,Math.min(...retry)):null,anchors:anchors.map(a=>a.key),routeFingerprint:p.world.job?.journey?.routeFingerprint||null};
 }
-export async function runEventClock(p,core,{real=Date.now(),prepare=false}={}){
+/** @param {any} p @param {any} core @param {{real?:number,prepare?:boolean,beforeShoreChange?:(p:any)=>Promise<void>}} [options] */
+export async function runEventClock(p,core,{real=Date.now(),prepare=false,beforeShoreChange}={}){
  const target=p.world.now+Math.max(0,real-p.world.realAt);
  if(p.eventPlan)core.settlePlan(p,real);
  // Catch up only due work; the preview tape itself never publishes or fetches.
@@ -20,12 +21,16 @@ export async function runEventClock(p,core,{real=Date.now(),prepare=false}={}){
  // Publication cutoffs are independent from whether any movement was due.
  core.reconcilePublications(p.world,'/hunem/data',real);core.syncTeaching(p.world.diaries);
  p.world.realAt=real-(target-p.world.now);
+ const shore=await core.prepareFerryArrival?.(p.world.job,{now:real});
+ if(shore){if(shore.changedRoute)await beforeShoreChange?.(p);p.world.job=shore.job;}
  if(prepare||!p.eventResearch||p.eventResearch.routeFingerprint!==(p.world.job?.journey?.routeFingerprint||null))await prepareEventResearch(p,core,real);
  const oldVersion=p.eventPlan?.version||0;
  p.eventPlan=await core.buildEventPlan(p);
  // A monotonically increasing version also invalidates late external deliveries.
  if(p.eventPlan.version<=oldVersion)throw Error('EVENT_PLAN_VERSION');
  const r=p.eventResearch;
+ const shoreRetry=p.world.job?.journey?.shoreRetryAt;
+ if(shoreRetry>real)p.eventPlan.events.push({id:`${p.eventPlan.version}:shore:${shoreRetry}`,version:p.eventPlan.version,kind:'prepare',dueAt:shoreRetry,worldAt:shoreRetry-p.eventPlan.offset});
  if(r?.retryAt>real&&r.retryAt<real+24*3600000)p.eventPlan.events.push({id:`${p.eventPlan.version}:research:${r.retryAt}`,version:p.eventPlan.version,kind:'prepare',dueAt:r.retryAt,worldAt:r.retryAt-p.eventPlan.offset});
  p.eventPlan.events.sort((a,b)=>a.dueAt-b.dueAt);
  return eventSchedule(p);

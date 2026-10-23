@@ -1,6 +1,7 @@
 export {tick,snapshot,retryPendingRoute,dateParts} from '../../lib/engine-v2.mjs';
 export {cities} from '../../lib/world.mjs';
 export {getRoute} from '../../lib/routing.mjs';
+export {prepareFerryArrival} from '../../lib/ferry-arrival.mjs';
 export {reconcilePublications,publicationFolder,publicationDeadline,realDay} from '../../lib/publication-queue.mjs';
 export {syncTeaching,readLearning} from '../../lib/language-learning.mjs';
 export {createTopicResearcher,researchAnchor} from '../../lib/topic-research.mjs';

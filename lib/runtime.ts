@@ -25,7 +25,7 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
      const recoveryKey='backups/manual-before-event-recovery-'+core.realDay(now)+'.json';
      if(!(await bucket().get(recoveryKey)))await bucket().put(recoveryKey,json(p));
     }
-    if(p.eventArchitecture)await runEventClock(p,core);else await advanceCloud(p,core);
+    if(p.eventArchitecture)await runEventClock(p,core,{beforeShoreChange:async(p:any)=>{const key='backups/manual-before-ferry-city-'+p.world.job.start+'.json';if(!(await bucket().get(key)))await bucket().put(key,json(p));}});else await advanceCloud(p,core);
     // User-authorized, fixed-world/date migration. Backup precedes all plan changes.
     const migrationKey=core.tourMigration.id;
     if(!p.tourMigrations?.[migrationKey]&&core.realDay(Date.now())===core.tourMigration.day&&core.eligibleTourMigration(p.world,core.dateParts(p.world.now))){
