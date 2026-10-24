@@ -26,8 +26,15 @@ test('real isolated D1: subscription verification, stable replay IDs, committed-
   await Promise.all([service().process(p),service().process(p)]);assert.equal(sent.length,4,'concurrent retries send each event once');assert.equal(sent[0].body.eventId,sent[2].body.eventId);assert.equal((await service().status()).delivered,2);assert.equal(JSON.stringify(p),before);
   const serialized=JSON.stringify(await service().status());assert.ok(!serialized.includes(secret)&&!serialized.includes('https://chatgpt.com'));
   await service().process(p);assert.equal(sent.length,4,'already acknowledged events never repeat');
-  p.world.events.push(event('drawn',p.world.now-2));await db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('footprint:'+footprintId('w','drawn'),'{}',now).run();await service().process(p);assert.equal(sent.length,4,'writing images never creates a visit or sends drawn visits');
-  p.world.events.push(event('gone',p.world.now-1));mode='gone';await service().process(p);assert.equal((await service().status()).stopped,1);now+=30*60000;await service().process(p);assert.equal(sent.length,5,'410 is terminal');
+  const one=footprintId('w','one'),requestId='11111111-1111-4111-8111-111111111111';
+  await Promise.all([service().replay(p,one,requestId),service().replay(p,one,requestId)]);assert.equal(sent.length,5,'concurrent replay request sends once');assert.notEqual(sent[4].body.eventId,sent[0].body.eventId);assert.deepEqual(sent[4].body.data,sent[0].body.data,'replay preserves the actual visit');
+  await service().replay(p,one,requestId);assert.equal(sent.length,5,'same replay request is idempotent');
+  for(const request of ['22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333'])await service().replay(p,one,request);
+  await assert.rejects(()=>service().replay(p,one,'44444444-4444-4444-8444-444444444444'),/REPLAY_DAILY_LIMIT/);assert.equal(sent.length,7);
+  await db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('footprint:'+one,'{}',now).run();assert.equal((await service().replay(p,one,requestId)).action,'already-drawn');assert.equal(sent.length,7);
+  assert.equal(JSON.stringify(p),before,'replays never mutate the world');
+  p.world.events.push(event('drawn',p.world.now-2));await db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('footprint:'+footprintId('w','drawn'),'{}',now).run();await service().process(p);assert.equal(sent.length,7,'writing images never creates a visit or sends drawn visits');
+  p.world.events.push(event('gone',p.world.now-1));mode='gone';await service().process(p);assert.equal((await service().status()).stopped,1);now+=30*60000;await service().process(p);assert.equal(sent.length,8,'410 is terminal');
   await service().rpc('events/unsubscribe',args,'other-owner','w');assert.equal((await service().status()).activeSubscriptions,1,'another owner cannot cancel original subscription');
   await service().rpc('events/unsubscribe',args,'owner','w');assert.equal((await service().status()).activeSubscriptions,0);
   mode='ok';await service().rpc('events/subscribe',args,'owner','w');now+=3600001;assert.equal((await service().status()).activeSubscriptions,0);assert.equal((await service().process(p)).delivered,0);
