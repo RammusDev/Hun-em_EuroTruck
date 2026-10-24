@@ -5,11 +5,11 @@ import jpeg from 'jpeg-js';
 import {pngReceipt} from './mcp-file.mjs';
 
 export const previewPolicy={version:'jpeg-512-q78-v1',maxEdge:512,quality:78,maxBytes:160*1024};
-export function makeReferencePreview(bytes){
+export function makeReferencePreview(bytes,policy=previewPolicy){
  const original=pngReceipt(Buffer.from(bytes));
  const image=png.PNG.sync.read(Buffer.from(bytes),{checkCRC:true});
  const {width:sw,height:sh}=image,channels=4,depth=8;
- const scale=Math.min(1,previewPolicy.maxEdge/Math.max(sw,sh)),width=Math.max(1,Math.round(sw*scale)),height=Math.max(1,Math.round(sh*scale));
+ const scale=Math.min(1,policy.maxEdge/Math.max(sw,sh)),width=Math.max(1,Math.round(sw*scale)),height=Math.max(1,Math.round(sh*scale));
  const rgba=new Uint8Array(width*height*4),sample=i=>image.data[i]/(depth===16?257:1);
  // Box downsample preserves the whole composition. Alpha is composited on white.
  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
@@ -21,8 +21,8 @@ export function makeReferencePreview(bytes){
   }
   const out=(y*width+x)*4;rgba[out]=Math.round(r/n);rgba[out+1]=Math.round(g/n);rgba[out+2]=Math.round(b/n);rgba[out+3]=255;
  }
- const output=jpeg.encode({data:rgba,width,height},previewPolicy.quality).data;
- if(output.length>previewPolicy.maxBytes)throw Error('REFERENCE_PREVIEW_TOO_LARGE');
+ const output=jpeg.encode({data:rgba,width,height},policy.quality).data;
+ if(output.length>policy.maxBytes)throw Error('REFERENCE_PREVIEW_TOO_LARGE');
  return {bytes:output,width,height,originalBytes:original.bytes,sourceSha256:original.sha256,mimeType:'image/jpeg'};
 }
 

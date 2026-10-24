@@ -2,6 +2,7 @@ import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,
 import {publication} from '../../../lib/publication';
 import {journalRecovery} from '../../../lib/journal-recovery.mjs';
 import {env} from 'cloudflare:workers';
+import {footprintRead,footprintQueue,saveFootprint} from '../../../lib/footprints';
 import {worldActor} from '../../../lib/world-auth';
 import {readMonitor,setMonitorEmail,runMonitor} from '../../../lib/monitor-store.mjs';
 // @ts-ignore
@@ -12,6 +13,7 @@ export async function GET(req:Request){try{
  const route=new URL(req.url).pathname;
  const role=authorizeWorld(await worldActor(req),'GET',route);
  const view=(p:any)=>role==='reader'?publicReaderView(stateView(p)):{...stateView(p),viewerRole:role};
+ if(route==='/api/footprints')return result(await footprintRead(new URL(req.url)));
  if(route==='/api/monitor'){const p=await committed();return result(await readMonitor(p,stateView(p),env));}
  if(route==='/api/state')return result({...view(await committed()),syncPending:false});
  if(route==='/api/state'){try{return result(await transaction(async p=>view(p)));}catch(e){if(!(e instanceof Conflict))throw e;return result({...view(await committed()),syncPending:true});}}
@@ -28,6 +30,16 @@ export async function GET(req:Request){try{
 export async function POST(req:Request){try{
  const u=new URL(req.url),route=u.pathname;
  const actor=await worldActor(req);authorizeWorld(actor,'POST',route);
+ if(route==='/api/footprints'){
+  if(actor?.role!=='service'&&req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);
+  if(req.headers.get('origin')&&req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);
+  if(u.searchParams.get('op')==='queue')return result(await footprintQueue());
+  if(Number(req.headers.get('content-length')||0)>8*1024*1024)return result({error:'File too large'},413);
+  const reader=req.body?.getReader();if(!reader)throw Error('EMPTY_FILE');const parts=[];let size=0;
+  for(;;){const r=await reader.read();if(r.done)break;size+=r.value.length;if(size>8*1024*1024){await reader.cancel();throw Error('FILE_TOO_LARGE');}parts.push(Buffer.from(r.value));}
+  const review=JSON.parse(req.headers.get('x-footprint-review')||'{}');
+  return result(await saveFootprint(u.searchParams.get('id')||'',Buffer.concat(parts),review));
+ }
  if(actor?.role==='service'&&route==='/api/object'&&!/^generated\/hunem-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}\/[a-z0-9-]+\.png$/.test(u.searchParams.get('key')||''))return result({error:'Service upload scope denied'},403);
  if(actor?.role!=='service'&&req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);
  if(req.headers.get('origin')&&req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);
