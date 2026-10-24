@@ -31,6 +31,23 @@ test('isolated D1/R2: pure reads, reviewed immutable original, 128px thumbnail, 
   const thumb=await api.footprintObject(saved.thumbnail.slice(1)),decoded=jpeg.decode(Buffer.from(await thumb.arrayBuffer()));assert.equal(decoded.width,128);assert.equal(decoded.height,128);
   assert.equal((await api.saveFootprint(row.id,image,review)).reused,true);
   const other=png.PNG.sync.write({width:256,height:256,data:Buffer.alloc(256*256*4,120)});await assert.rejects(()=>api.saveFootprint(row.id,other,review),/ALREADY_DRAWN/);
+  await assert.rejects(()=>api.replaceFootprint(row.id,'0'.repeat(64),other,review,'Correct architecture'),/FOOTPRINT_CHANGED/);
+  await assert.rejects(()=>api.replaceFootprint(row.id,saved.sha256,other,review,''),/REASON_REQUIRED/);
+  await assert.rejects(()=>api.replaceFootprint(row.id,saved.sha256,other,{},'Correct architecture'),/REVIEW_REQUIRED/);
+  const replaced=await api.replaceFootprint(row.id,saved.sha256,other,review,'Correct architecture');
+  assert.equal(replaced.replaced,true);assert.equal(replaced.worldModified,false);
+  assert.equal((await api.footprintRead(new URL('https://isolated.test/api/footprints'))).items[0].image.sha256,replaced.sha256);
+  assert.deepEqual(Buffer.from(await (await api.footprintObject(saved.src.slice(1))).arrayBuffer()),image);
+  assert.deepEqual(Buffer.from(await (await api.footprintObject(replaced.src.slice(1))).arrayBuffer()),other);
+  assert.ok(await api.footprintObject(saved.thumbnail.slice(1)));
+  const history=await DB.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(replaced.historyKey).first();assert.equal(JSON.parse(history.value).sha256,saved.sha256);
+  assert.equal((await api.replaceFootprint(row.id,saved.sha256,other,review,'Correct architecture')).reused,true);
+  await assert.rejects(()=>api.replaceFootprint(row.id,'0'.repeat(64),other,review,'Stale request'),/FOOTPRINT_CHANGED/);
+  await assert.rejects(()=>api.saveFootprint(row.id,image,review),/ALREADY_DRAWN/);
+  const competing=png.PNG.sync.write({width:256,height:256,data:Buffer.alloc(256*256*4,80)});
+  const fourth=png.PNG.sync.write({width:256,height:256,data:Buffer.alloc(256*256*4,60)});
+  const race=await Promise.allSettled([api.replaceFootprint(row.id,replaced.sha256,competing,review,'First correction'),api.replaceFootprint(row.id,replaced.sha256,fourth,review,'Concurrent correction')]);
+  assert.equal(race.filter(r=>r.status==='fulfilled').length,1);assert.equal(race.filter(r=>r.status==='rejected').length,1);
   assert.equal(await api.footprintObject('footprints/'+row.id+'/'+'0'.repeat(64)+'.png'),null);
   assert.ok(await BUCKET.get('backups/manual-before-footprints-20261024.json'));assert.equal(JSON.stringify(p),before);
  }finally{delete globalThis.__footprintsTest;await mf.dispose();}

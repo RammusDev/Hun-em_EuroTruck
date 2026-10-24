@@ -50,8 +50,37 @@ export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:str
  if(lease)await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind('footprint-claim:'+id,lease).run();
  return {id,...result,originalBytes:bytes.length,thumbnailBytes:preview.bytes.length,backupKey,worldModified:false};
 }
+// Explicit owner-requested correction only. Ordinary event saves stay immutable.
+export async function replaceFootprint(id:string,expectedSha256:string,bytes:Buffer,review:any,reason:string){
+ if(!isId(id)||typeof expectedSha256!=='string'||!/^[a-f0-9]{64}$/.test(expectedSha256))throw Error('INVALID_FOOTPRINT');
+ if(typeof reason!=='string'||!reason.trim()||reason.length>500)throw Error('REPLACEMENT_REASON_REQUIRED');
+ if(!(await footprints()).some((r:any)=>r.id===id))throw Error('VISIT_REQUIRED');
+ const receipt=pngReceipt(bytes);
+ if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.landmarkRecognizable!==true||!review.originalGeneratedPath)throw Error('FOOTPRINT_REVIEW_REQUIRED');
+ if(receipt.width!==receipt.height)throw Error('SQUARE_PNG_REQUIRED');
+ const key='footprint:'+id,old=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(key).first<any>();
+ if(!old)throw Error('FOOTPRINT_NOT_DRAWN');
+ const previous=JSON.parse(old.value);
+ if(previous.sha256===receipt.sha256){
+  if(expectedSha256!==receipt.sha256&&!(await db().prepare('SELECT id FROM hunem_runtime WHERE id=?').bind('footprint-history:'+id+':'+expectedSha256).first()))throw Error('FOOTPRINT_CHANGED');
+  return {id,...previous,reused:true,worldModified:false};
+ }
+ if(previous.sha256!==expectedSha256)throw Error('FOOTPRINT_CHANGED');
+ const preview=makeReferencePreview(bytes,{version:'footprint-128-v1',maxEdge:128,quality:78,maxBytes:24000}),base=`footprints/${id}/${receipt.sha256}`,at=Date.now();
+ await bucket().put(base+'.png',bytes,{httpMetadata:{contentType:'image/png'}});
+ await bucket().put(base+'.jpg',preview.bytes,{httpMetadata:{contentType:'image/jpeg'}});
+ const image={src:'/'+base+'.png',thumbnail:'/'+base+'.jpg',sha256:receipt.sha256,drawnAt:at,width:receipt.width,height:receipt.height,review,replacement:{previousSha256:expectedSha256,reason:reason.trim(),at}};
+ const historyKey='footprint-history:'+id+':'+expectedSha256;
+ const results=await db().batch([
+  db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) SELECT ?,value,0,? FROM hunem_runtime WHERE id=? AND value=?').bind(historyKey,at,key,old.value),
+  db().prepare('UPDATE hunem_runtime SET value=?,revision=revision+1,updated_at=? WHERE id=? AND value=?').bind(JSON.stringify(image),at,key,old.value)
+ ]);
+ if(results[1].meta.changes!==1)throw Error('FOOTPRINT_CHANGED');
+ return {id,...image,replaced:true,previousSha256:expectedSha256,historyKey,originalBytes:bytes.length,thumbnailBytes:preview.bytes.length,worldModified:false};
+}
 export async function footprintObject(key:string){
  const match=/^footprints\/([a-f0-9]{32})\/([a-f0-9]{64})\.(png|jpg)$/.exec(key);if(!match)return null;
- const row=(await footprints()).find((r:any)=>r.id===match[1]);if(!row?.image||row.image.sha256!==match[2])return null;
+ const row=(await footprints()).find((r:any)=>r.id===match[1]);if(!row?.image)return null;
+ if(row.image.sha256!==match[2]&&!(await db().prepare('SELECT id FROM hunem_runtime WHERE id=?').bind('footprint-history:'+match[1]+':'+match[2]).first()))return null;
  return bucket().get(key);
 }
