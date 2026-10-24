@@ -10,7 +10,7 @@ import {footprintInventory} from '../bridge/footprints.mjs';
 test('isolated D1/R2: pure reads, reviewed immutable original, 128px thumbnail, authorization visibility and idempotency',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("isolated")}}',compatibilityDate:'2026-05-15',d1Databases:{DB:'footprint-test'},r2Buckets:{BUCKET:'footprint-test'},host:'127.0.0.1',port:0});
  try{
-  const DB=await mf.getD1Database('DB'),BUCKET=await mf.getR2Bucket('BUCKET');await DB.prepare('CREATE TABLE hunem_runtime(id TEXT PRIMARY KEY,value TEXT,revision INTEGER,updated_at INTEGER)').run();
+  const DB=await mf.getD1Database('DB'),BUCKET=await mf.getR2Bucket('BUCKET');await DB.prepare('CREATE TABLE hunem_runtime(id TEXT PRIMARY KEY,value TEXT,revision INTEGER,updated_at INTEGER,lease TEXT,lease_until INTEGER)').run();
   const p={world:{publicationWorldId:'isolated',now:Date.now(),events:[{type:'visit',time:1,place:{topicId:'test',name:'Isolated landmark',p:[9,54]}}]}};
   const before=JSON.stringify(p);globalThis.__footprintsTest={DB,BUCKET,p};
   let code=await fs.readFile(new URL('../lib/footprints.ts',import.meta.url),'utf8');
@@ -23,7 +23,10 @@ test('isolated D1/R2: pure reads, reviewed immutable original, 128px thumbnail, 
   const image=png.PNG.sync.write({width:256,height:256,data:Buffer.alloc(256*256*4,255)}),review={tool:'image_gen.imagegen',actuallyCalled:true,landmarkRecognizable:true,originalGeneratedPath:'isolated-test-fixture.png'};
   await assert.rejects(()=>api.saveFootprint(row.id,image,{}),/REVIEW_REQUIRED/);
   await assert.rejects(()=>api.saveFootprint('0'.repeat(32),image,review),/VISIT_REQUIRED/);
-  const saved=await api.saveFootprint(row.id,image,review);assert.equal(saved.worldModified,false);
+  const claimed=await api.claimFootprint(row.id);assert.equal(claimed.action,'generate');assert.equal((await api.claimFootprint(row.id)).action,'busy');
+  await assert.rejects(()=>api.saveFootprint(row.id,image,review),/CLAIM_REQUIRED/);
+  await assert.rejects(()=>api.saveFootprint(row.id,image,review,'wrong-lease'),/CLAIM_REQUIRED/);
+  const saved=await api.saveFootprint(row.id,image,review,claimed.lease);assert.equal(saved.worldModified,false);assert.equal((await api.claimFootprint(row.id)).action,'already-drawn');
   assert.deepEqual(Buffer.from(await (await api.footprintObject(saved.src.slice(1))).arrayBuffer()),image);
   const thumb=await api.footprintObject(saved.thumbnail.slice(1)),decoded=jpeg.decode(Buffer.from(await thumb.arrayBuffer()));assert.equal(decoded.width,128);assert.equal(decoded.height,128);
   assert.equal((await api.saveFootprint(row.id,image,review)).reused,true);

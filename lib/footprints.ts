@@ -19,13 +19,22 @@ export async function footprintRead(u:URL){
  return {total:rows.length,page,hasMore:!id&&(page+1)*12<selected.length,items:id?selected:selected.slice(page*12,(page+1)*12),timeZone:'Europe/Berlin'};
 }
 export async function footprintQueue(){
- const rows=await footprints();return {pending:rows.filter((r:any)=>!r.image).length,items:rows.filter((r:any)=>!r.image).sort((a:any,b:any)=>a.firstSeenAt-b.firstSeenAt).slice(0,8),instructions:'Generate ONE distinct quick pencil-and-watercolor landmark sketch per item using image_gen.imagegen. The actual named landmark must be recognizable; use its source to verify appearance. No generic category icon, text, collage, or reused daily illustration. Square PNG, transparent background, landmark only (no character required). Inspect before submitting original PNG to hunem_receive_footprint; landmarkRecognizable and actuallyCalled must be true only after real generation and visual review. Existing image is immutable and reused for revisits. Finish the daily journal first; do not delay it or alter its cutoff. Pending sketches persist until a later run. No additional schedule.'};
+ const rows=await footprints();return {pending:rows.filter((r:any)=>!r.image).length,items:rows.filter((r:any)=>!r.image).sort((a:any,b:any)=>a.firstSeenAt-b.firstSeenAt).slice(0,8),instructions:'For a visit event, process only its footprintId now, independently of nightly journals. Call hunem_claim_footprint BEFORE imagegen; generate only for action=generate, skip busy/already-drawn. Pass its lease to hunem_receive_footprint. Generate ONE distinct quick pencil-and-watercolor recognizable landmark sketch per item with image_gen.imagegen. Verify appearance using its source, including present-day remains for demolished sites. No generic category icon, text, collage, or reused daily illustration. Square PNG, transparent background, landmark only. Inspect before submitting original PNG; actuallyCalled and landmarkRecognizable must reflect real generation and visual review. Existing images are immutable and reused for revisits. Never claim, rewrite or publish a journal from a visit event. Pending sketches survive retries; the daily journal cutoff is unchanged.'};
 }
-export async function saveFootprint(id:string,bytes:Buffer,review:any){
+export async function claimFootprint(id:string){
+ if(!isId(id))throw Error('INVALID_FOOTPRINT');const row=(await footprints()).find((r:any)=>r.id===id);if(!row)throw Error('VISIT_REQUIRED');if(row.image)return {action:'already-drawn',id};
+ const key='footprint-claim:'+id,now=Date.now(),lease=crypto.randomUUID();
+ await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(key,'{}',now).run();
+ const result=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,now+20*60000,key,now).first();
+ return result?{action:'generate',id,lease,expiresAt:now+20*60000,item:row}:{action:'busy',id};
+}
+export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:string){
  if(!isId(id))throw Error('INVALID_FOOTPRINT');
  const rows=await footprints(),row=rows.find((r:any)=>r.id===id);if(!row)throw Error('VISIT_REQUIRED');
  const receipt=pngReceipt(bytes);
  if(row.image){if(row.image.sha256!==receipt.sha256)throw Error('FOOTPRINT_ALREADY_DRAWN');return {...row.image,reused:true};}
+ const claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind('footprint-claim:'+id).first<any>();
+ if((claim||lease)&&(!claim||claim.lease!==lease||claim.lease_until<Date.now()))throw Error('FOOTPRINT_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.landmarkRecognizable!==true||!review.originalGeneratedPath)throw Error('FOOTPRINT_REVIEW_REQUIRED');
  if(receipt.width!==receipt.height)throw Error('SQUARE_PNG_REQUIRED');
  const preview=makeReferencePreview(bytes,{version:'footprint-128-v1',maxEdge:128,quality:78,maxBytes:24000}),base=`footprints/${id}/${receipt.sha256}`,original=base+'.png',thumbnail=base+'.jpg';
@@ -38,6 +47,7 @@ export async function saveFootprint(id:string,bytes:Buffer,review:any){
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('footprint:'+id,JSON.stringify(image),Date.now()).run();
  const saved=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('footprint:'+id).first<any>();
  const result=JSON.parse(saved.value);if(result.sha256!==receipt.sha256)throw Error('FOOTPRINT_ALREADY_DRAWN');
+ if(lease)await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind('footprint-claim:'+id,lease).run();
  return {id,...result,originalBytes:bytes.length,thumbnailBytes:preview.bytes.length,backupKey,worldModified:false};
 }
 export async function footprintObject(key:string){
