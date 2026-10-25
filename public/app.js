@@ -84,6 +84,14 @@ function describeEvent(e){
  if(e.type==='visit')return `${e.transportMode==='passenger'?'景點行程':'散步'}完成：${e.place.name}，已返回住宿處。`;
  return '旅程狀態更新。';
 }
+function truckStatusNote(s){
+ if(s.activity?.kind==='pending')return '卡車狀態：等待下一段安排';
+ if(s.status==='行駛中')return '卡車行駛中';
+ if(s.status==='搭乘渡輪中')return '卡車隨渡輪航行中';
+ if(['裝貨中','卸貨中','渡輪登船中'].includes(s.status))return '卡車作業：'+s.status;
+ const location=s.stay?.name||s.cities.find(c=>c.id===s.location)?.name||'目前停車點';
+ return `卡車停留：${location}${s.holiday?' · '+(s.holiday.local?'在慕尼黑休假':s.holiday.requiresFlight===false?'搭車返家休假':'搭機返家休假'):''}`;
+}
 function renderHoliday(){
  const card=document.querySelector('.job-card');
  card.querySelector('.small-label').textContent=state.job?'目前配送':'目前活動';
@@ -92,7 +100,7 @@ function renderHoliday(){
  renderFinance();
  renderJourneyPlan();
  renderPublicationStatus();
- text('holiday-note',`卡車停留：${state.stay?.name||city(state.location).name}${state.holiday?' · '+(state.holiday.local?'在慕尼黑休假':state.holiday.requiresFlight===false?'搭車返家休假':'搭機返家休假'):''}`);
+ text('holiday-note',truckStatusNote(state));
  if(state.activity&&!state.travel&&!state.job){const a=state.activity;text('route-title',a.title);text('cargo',a.detail);text('provider',a.kind==='hotel-rest'?'今日決定 · 留在旅館休息':'今日活動 · '+(a.target||'當地旅遊'));text('distance','—');text('reward','—');const ends={waiting:'抵達下一站',outbound:'抵達下一站',visit:'參觀結束',meal:'用餐結束',rest:'休息結束',return:'返回停車點','legacy-outing':'行程結束'};text('eta',a.until?'預計 '+time(a.until)+' '+(ends[a.kind]||'完成此段'):'今天的活動安排已保存');}
  else if(state.travel){text('route-title',state.travel.name);text('cargo','卡車留在'+city(state.location).name+'，Hun-em 正在搭乘交通工具。');text('provider',state.travel.route.provider);text('distance','—');text('reward','—');text('eta','預計 '+time(state.travel.end)+' 完成此段');}
  else if(state.outing?.tourVersion){const o=state.outing,labels={outbound:'抵達下一站',visit:'參觀結束',meal:'用餐結束',rest:'休息結束',return:'返回住宿停車點'};text('route-title',o.place.name);text('cargo',o.phase==='meal'?'旅遊途中用餐 · 預留三十分鐘':o.phase==='return'?'返回住宿停車點；卡車留在原地。':'當地旅遊 · 每站完成後依剩餘時間安排下一站');text('provider',o.transportMode==='passenger'?'模擬大眾運輸 · 含十分鐘候車，非即時班表':'當地步行／停留');text('distance','—');text('reward','—');text('eta','預計 '+time(o.end)+' '+labels[o.phase]);}
