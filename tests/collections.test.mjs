@@ -3,6 +3,13 @@ import {collectionInventory} from '../bridge/collections.mjs';
 import {authorizeWorld} from '../lib/world-policy.mjs';
 const meal=(id,time,extra={})=>({type:'meal_finished',mealId:id,time,day:'2026-10-25',meal:'lunch',location:'a',food:{name:'Pannfisch',localDish:true,scope:'region',region:'Schleswig-Holstein',country:'DE',source:'https://example.org/food'},...extra});
 const soda=(id,time)=>({type:'expense',category:'soda',id,time,day:'2026-10-25',soda:{id:'fritz-orange',name:'fritz-limo orange',brand:'fritz-limo',flavour:'orange',source:'https://fritz-kola.com/'}});
+
+test('sentence fragments in old world and archived meals are excluded without rewriting facts or soda collections',()=>{
+ const invalid=meal('bad',100,{food:{...meal().food,name:'If you'}}),valid=meal('good',200);
+ const p={world:{publicationWorldId:'w',now:400,events:[invalid,valid,soda('s1',300)],publicationJobs:[{input:{events:[structuredClone(invalid)]}}]}},before=JSON.stringify(p);
+ const rows=collectionInventory(p,'meal',400);assert.deepEqual(rows.map(r=>r.name),['Pannfisch']);
+ assert.equal(collectionInventory(p,'soda',400).length,1);assert.equal(JSON.stringify(p),before);
+});
 test('meal completion and actual soda purchase are distinct facts; archived overlap, future facts, regional identity and repeated purchases deduplicate correctly',()=>{
  const events=[meal('m1',100),meal('m2',200,{location:'b'}),meal('future',500),{type:'expense',category:'meal',time:50,food:{name:'Not eaten'}},meal('plain',300,{food:{name:'午間套餐',localDish:false}}),soda('soda:day1',80),soda('soda:day2',220),{type:'soda_finished',time:400,soda:{id:'fritz-orange'}}];
  const p={world:{publicationWorldId:'w',now:400,events,publicationJobs:[{input:{events:structuredClone(events)}}]}},before=JSON.stringify(p);

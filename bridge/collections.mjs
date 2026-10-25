@@ -1,5 +1,6 @@
 // Pure projection of committed facts; never called from minute planning.
 import {createHash} from 'node:crypto';
+import {isDishName} from './dish-identity.mjs';
 export const collectionKinds=['meal','soda'];
 export const collectionId=(world,kind,key)=>createHash('sha256').update(world+'\n'+kind+'\n'+key).digest('hex').slice(0,32);
 const normalize=s=>String(s||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase();
@@ -10,7 +11,7 @@ export function collectionInventory(payload,kind,now=Date.now()){
   if(!Number.isFinite(e.time)||e.time>now)return;
   let food,key,occurrence,localDish=false;
   if(kind==='meal'){
-   if(e.type!=='meal_finished')return;food=e.food||{};localDish=food.localDish===true&&!!food.name&&/^https:\/\//.test(food.source||'');
+   if(e.type!=='meal_finished')return;food=e.food||{};localDish=food.localDish===true&&isDishName(food.name)&&/^https:\/\//.test(food.source||'');
    // Generic simulated meals remain world facts, but are not collectible dishes.
    if(!localDish)return;
    const scope=food.scope==='region'&&food.region?'region:'+normalize(food.country)+':'+normalize(food.region):'city:'+(food.cityId||e.location||'unknown');
