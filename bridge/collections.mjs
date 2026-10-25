@@ -11,6 +11,8 @@ export function collectionInventory(payload,kind,now=Date.now()){
   let food,key,occurrence,localDish=false;
   if(kind==='meal'){
    if(e.type!=='meal_finished')return;food=e.food||{};localDish=food.localDish===true&&!!food.name&&/^https:\/\//.test(food.source||'');
+   // Generic simulated meals remain world facts, but are not collectible dishes.
+   if(!localDish)return;
    const scope=food.scope==='region'&&food.region?'region:'+normalize(food.country)+':'+normalize(food.region):'city:'+(food.cityId||e.location||'unknown');
    key=localDish?scope+':'+normalize(food.name):'ordinary:'+normalize(food.name||food.zh||e.meal||'餐點');
    occurrence=e.mealId||[e.day,e.meal,e.time,e.location].join(':');
