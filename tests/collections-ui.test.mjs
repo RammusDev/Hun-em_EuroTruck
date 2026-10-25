@@ -10,10 +10,10 @@ class Element{
  setAttribute(k,v){this.attributes[k]=v;}removeAttribute(k){delete this.attributes[k];}
  addEventListener(k,v){this.listeners[k]=v;}showModal(){this.open=true;}close(){this.open=false;this.listeners.close?.();}focus(){this.focused=true;}
 }
-function setup(){
+function setup(mobile=false){
  const ids=Object.fromEntries(['collections-dialog','collections-list','collections-status','collections-prev','collections-next','collections-title','collections-note','open-meals','open-sodas','close-collections','sodas-held','meals-total','sodas-total'].map(id=>[id,new Element()]));
  const requests=[],window={};let now=100000;
- vm.runInNewContext(script,{matchMedia:()=>({matches:false,addEventListener(){}}),document:{body:{classList:{add(){},remove(){}}},getElementById:id=>ids[id],createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text})},window,Intl,URL,URLSearchParams,AbortController,Date:class extends Date{static now(){return now;}},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve:data=>resolve({ok:true,json:async()=>data}),reject}))});
+ vm.runInNewContext(script,{matchMedia:()=>({matches:mobile,addEventListener(){}}),document:{body:{classList:{add(){},remove(){}}},getElementById:id=>ids[id],createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text})},window,Intl,URL,URLSearchParams,AbortController,Date:class extends Date{static now(){return now;}},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve:data=>resolve({ok:true,json:async()=>data}),reject}))});
  return{ids,window,requests,advance:()=>{now+=60001;},open:kind=>ids['open-'+kind].onclick({currentTarget:ids['open-'+kind]})};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -53,3 +53,5 @@ test('city IDs become display names; unknown IDs are omitted and soda sources st
  x.requests[0].resolve(data([row({name:'汽水',source:'https://example.com/product',occurrences:[{time:1792832400000,location:'at-kufstein'},{time:1792832400000,location:'de-unknown'}]}),row({source:'javascript:alert(1)'})]));await tick();
  const card=x.ids['collections-list'].children[0],history=card.children.find(e=>e.tagName==='details');assert.match(history.children[1].children[1].textContent,/庫夫施泰因/);assert.doesNotMatch(history.children[2].children[1].textContent,/de-unknown/);assert.equal(card.children.find(e=>e.tagName==='a').textContent,'產品資料來源 ↗');assert.ok(!x.ids['collections-list'].children[1].children.some(e=>e.tagName==='a'));
 });
+
+for(const mobile of [false,true])test('soda catalogue shows four per page on '+(mobile?'mobile':'desktop'),async()=>{const x=setup(mobile);x.open('sodas');x.requests[0].resolve({items:Array.from({length:12},(_,i)=>row({name:'汽水'+i})),total:14,totalOccurrences:14});await tick();assert.equal(x.ids['collections-list'].children.length,4);assert.equal(x.ids['collections-dialog'].attributes['data-kind'],'soda');for(let i=0;i<3;i++){x.ids['collections-next'].onclick();await tick();}assert.match(x.requests[1].url,/page=1/);x.requests[1].resolve({items:[row({name:'汽水12'}),row({name:'汽水13'})],total:14,totalOccurrences:14});await tick();assert.equal(x.ids['collections-list'].children.length,2);assert.equal(x.ids['collections-next'].disabled,true);});

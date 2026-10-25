@@ -3,7 +3,7 @@
  const list=$('collections-list'),status=$('collections-status'),prev=$('collections-prev'),next=$('collections-next');
  const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
  const fmt=new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
- const mobile=matchMedia('(max-width:700px)'),perPage=()=>mobile.matches?1:2;
+ const mobile=matchMedia('(max-width:700px)'),perPage=()=>kind==='soda'?4:mobile.matches?1:2;
  const cache=new Map();let total=0;
  let kind='meal',page=0,opener,request=0,controller,lastSummary=0,summaryPending=false,heldKey;
  let citiesInput,cityNames=new Map();
@@ -28,7 +28,7 @@
   catch(error){if(id!==request||error.name==='AbortError')return;status.textContent=error.message;const retry=node('button','重新載入');retry.type='button';retry.onclick=draw;list.replaceChildren(retry);prev.disabled=page===0;}
   finally{if(id===request)list.removeAttribute('aria-busy');}
  }
- function open(type,event){cache.clear();kind=type;page=0;opener=event.currentTarget;$('collections-title').textContent=type==='meal'?'餐點紀錄':'汽水圖鑑';$('collections-note').textContent=type==='meal'?'只收藏有來源的具名地方料理，記錄吃完時間並畫專屬速寫；重吃沿用圖片並累計次數。麵包與熱飲、午間套餐等虛擬餐點不列入。時間以柏林時區顯示。':'依購買時間記錄每款汽水與次數，首次購買後畫瓶罐速寫；每天的飲用仍依原作息進行。時間以柏林時區顯示。';if(!dialog.open)dialog.showModal();document.body.classList.add('collections-open');draw();}
+ function open(type,event){cache.clear();kind=type;dialog.setAttribute('data-kind',type);page=0;opener=event.currentTarget;$('collections-title').textContent=type==='meal'?'餐點紀錄':'汽水圖鑑';$('collections-note').textContent=type==='meal'?'只收藏有來源的具名地方料理，記錄吃完時間並畫專屬速寫；重吃沿用圖片並累計次數。麵包與熱飲、午間套餐等虛擬餐點不列入。時間以柏林時區顯示。':'依購買時間記錄每款汽水與次數，首次購買後畫瓶罐速寫；每天的飲用仍依原作息進行。時間以柏林時區顯示。';if(!dialog.open)dialog.showModal();document.body.classList.add('collections-open');draw();}
  $('open-meals').onclick=e=>open('meal',e);$('open-sodas').onclick=e=>open('soda',e);$('close-collections').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{document.body.classList.remove('collections-open');request++;controller?.abort();list.replaceChildren();list.removeAttribute('aria-busy');opener?.focus();});
  prev.onclick=()=>{if(page>0){page--;draw();dialog.scrollTop=0;}};next.onclick=()=>{if(!next.disabled){page++;draw();dialog.scrollTop=0;}};
  function turn(direction){if(direction<0){if(!prev.disabled)prev.onclick();}else if(!next.disabled)next.onclick();}
