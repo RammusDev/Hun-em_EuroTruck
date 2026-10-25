@@ -2,6 +2,7 @@ import {transaction,seed,stateView,putObject,research,engine,committed,Conflict,
 import {publication} from '../../../lib/publication';
 import {journalRecovery} from '../../../lib/journal-recovery.mjs';
 import {env} from 'cloudflare:workers';
+import {runEventClock,notifyEventTimer} from '../../../bridge/event-runtime.mjs';
 import {footprintRead,footprintQueue,saveFootprint} from '../../../lib/footprints';
 import {collectionRead} from '../../../lib/collections';
 import {worldActor} from '../../../lib/world-auth';
@@ -72,6 +73,23 @@ export async function POST(req:Request){try{
  if(route==='/api/object')return result(await putObject(u.searchParams.get('key')||'',await req.arrayBuffer()));
  if(route==='/api/publication'){
   const body:any=await req.json();
+  if(body.op==='tour-recovery-read'||body.op==='tour-recovery-commit'){
+   if(body.expectedWorldId!==engine.florenceRecovery.worldId)throw new Conflict('FLORENCE_RECOVERY_SCOPE');
+   if(body.op==='tour-recovery-read')return result(engine.florenceRecoveryView(await committed()));
+   const receipt=await transaction(async(p:any)=>{
+    if(p.world.publicationWorldId!==body.expectedWorldId)throw new Conflict('FLORENCE_RECOVERY_SCOPE');
+    if(p.florenceTourRecovery?.id===engine.florenceRecovery.id)return {...p.florenceTourRecovery,reused:true};
+    if(engine.realDay(Date.now())!==engine.florenceRecovery.day)throw new Conflict('FLORENCE_RECOVERY_EXPIRED');
+    const backupKey='backups/manual-before-florence-tour-20261025-v1.json',bucket=env.BUCKET as R2Bucket;
+    if(!(await bucket.get(backupKey)))await bucket.put(backupKey,JSON.stringify(p),{httpMetadata:{contentType:'application/json'}});
+    await runEventClock(p,engine,{real:Date.now(),prepare:false});
+    const r=await engine.recoverFlorenceTour(p,{now:Date.now(),random:engine.eventRandom(p.world)});
+    p.eventPlan=await engine.buildEventPlan(p);r.backupKey=backupKey;r.planVersion=p.eventPlan.version;
+    return r;
+   },false,true,{skipCommit:(r:any)=>r.reused===true});
+   try{await notifyEventTimer((env as any).EVENT_TIMER_CONTROL_URL,(env as any).BACKGROUND_TICK_SECRET);}catch{console.log('florence-recovery-timer-pending-health');}
+   return result(receipt);
+  }
   if(body.op==='metrics')return result(await publication(await committed(),'metrics',body));
   if(typeof body.op==='string'&&body.op.startsWith('recovery-')){
    const backup=async(key:string,bytes:string,digest:string)=>{const bucket=env.BUCKET as R2Bucket,old=await bucket.get(key);if(old){if(engine.digest(await old.text())!==digest)throw new Conflict('Recovery backup already exists with different state');}else await bucket.put(key,bytes,{httpMetadata:{contentType:'application/json'}});};

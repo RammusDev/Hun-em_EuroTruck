@@ -12,3 +12,4 @@ export {validateDailyWriting,digest,writingContent,writingMode} from '../../lib/
 export {hydrate,changes,readFileSync,writeFileSync} from './fs.mjs';
 export {freshWorldPayload,correctHomeStart} from '../../lib/world-reset.mjs';
 export {buildEventPlan,settlePlan,projectPlan,publicTimeline,eventRandom} from '../../lib/event-timeline.mjs';
+export {recoverFlorenceTour,florenceRecoveryView,florenceRecovery} from '../../lib/florence-recovery.mjs';
