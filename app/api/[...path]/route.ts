@@ -3,6 +3,7 @@ import {publication} from '../../../lib/publication';
 import {journalRecovery} from '../../../lib/journal-recovery.mjs';
 import {env} from 'cloudflare:workers';
 import {footprintRead,footprintQueue,saveFootprint} from '../../../lib/footprints';
+import {collectionRead} from '../../../lib/collections';
 import {worldActor} from '../../../lib/world-auth';
 import {readMonitor,setMonitorEmail,runMonitor} from '../../../lib/monitor-store.mjs';
 // @ts-ignore
@@ -14,6 +15,7 @@ export async function GET(req:Request){try{
  const role=authorizeWorld(await worldActor(req),'GET',route);
  const view=(p:any)=>role==='reader'?publicReaderView(stateView(p)):{...stateView(p),viewerRole:role};
  if(route==='/api/footprints')return result(await footprintRead(new URL(req.url)));
+ if(route==='/api/collections')return result(await collectionRead(new URL(req.url)));
  if(route==='/api/monitor'){const p=await committed();return result(await readMonitor(p,stateView(p),env));}
  if(route==='/api/state')return result({...view(await committed()),syncPending:false});
  if(route==='/api/state'){try{return result(await transaction(async p=>view(p)));}catch(e){if(!(e instanceof Conflict))throw e;return result({...view(await committed()),syncPending:true});}}
