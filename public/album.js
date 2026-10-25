@@ -2,6 +2,7 @@
  let photos=[],page=0,opener=null,turning=false,closing=false;
  const dialog=document.getElementById('album-dialog'),book=document.getElementById('album-book'),spread=document.getElementById('album-spread'),counter=document.getElementById('album-counter'),prev=document.getElementById('album-prev'),next=document.getElementById('album-next'),empty=document.getElementById('album-empty');
  const mobile=matchMedia('(max-width:700px)'),perPage=()=>mobile.matches?1:2;
+ const updateNavigation=()=>{const total=Math.max(1,Math.ceil(photos.length/perPage()));counter.textContent=photos.length?`第 ${page+1} / ${total} 頁 · ${photos.length} 幅畫作`:'尚無畫作';prev.disabled=page===0||!photos.length;next.disabled=page>=total-1||!photos.length;};
  const draw=()=>{
   const per=perPage(),total=Math.max(1,Math.ceil(photos.length/per));page=Math.max(0,Math.min(page,total-1));spread.replaceChildren();empty.hidden=photos.length>0;book.hidden=!photos.length;
   for(let i=0;i<per;i++){
@@ -12,7 +13,7 @@
    }else{const end=document.createElement('p');end.className='album-last';end.textContent='下一幅，留給下一段路。';sheet.append(end);}
    const folio=document.createElement('span');folio.className='album-folio';folio.textContent=String(index+1).padStart(2,'0');sheet.append(folio);spread.append(sheet);
   }
-  counter.textContent=photos.length?`第 ${page+1} / ${total} 頁 · ${photos.length} 幅畫作`:'尚無畫作';prev.disabled=page===0||!photos.length;next.disabled=page>=total-1||!photos.length;
+  updateNavigation();
  };
  const duration=()=>matchMedia('(prefers-reduced-motion:reduce)').matches?1:1150;
  const cover=()=>{const el=document.createElement('div');el.className='album-cover';el.setAttribute('aria-hidden','true');el.innerHTML='<span>HUN-EM</span><strong>旅途速寫</strong><small>A CAT’S EUROPE</small><i>✧</i>';book.append(el);return el;};
@@ -22,16 +23,16 @@
   const oldSpread=spread.cloneNode(true);oldSpread.removeAttribute('id');oldSpread.classList.add('album-outgoing');oldSpread.setAttribute('aria-hidden','true');oldSpread.inert=true;prev.disabled=next.disabled=true;book.setAttribute('aria-busy','true');
   const target=page+direction,targets=photos.slice(target*perPage(),target*perPage()+perPage());
   await Promise.all(targets.map(art=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src=art.src;})));
-  page=target;draw();prev.disabled=next.disabled=true;
+  page=target;draw();dialog.querySelector('.album-desk').scrollTop=0;prev.disabled=next.disabled=true;
   book.append(oldSpread);
   const ms=matchMedia('(prefers-reduced-motion:reduce)').matches?1:440;
   await Promise.all([
    animate(oldSpread,[{opacity:1,transform:'translateX(0)'},{opacity:0,transform:`translateX(${-direction*28}px)`}],ms),
    animate(spread,[{opacity:.15,transform:`translateX(${direction*28}px)`},{opacity:1,transform:'translateX(0)'}],ms)
   ]);
-  oldSpread.remove();spread.getAnimations().forEach(a=>a.cancel());book.removeAttribute('aria-busy');turning=false;draw();
+  oldSpread.remove();spread.getAnimations().forEach(a=>a.cancel());book.removeAttribute('aria-busy');turning=false;updateNavigation();
  };
- document.getElementById('open-album').onclick=async e=>{if(dialog.open)return;opener=e.currentTarget;draw();dialog.showModal();document.body.classList.add('album-open');turning=true;prev.disabled=next.disabled=true;dialog.classList.add('album-opening');const el=cover();await animate(el,[{transform:'rotateY(0deg)'},{transform:'rotateY(-180deg)'}]);el.remove();dialog.classList.remove('album-opening');turning=false;draw();};
+ document.getElementById('open-album').onclick=async e=>{if(dialog.open)return;opener=e.currentTarget;draw();dialog.showModal();document.body.classList.add('album-open');turning=true;prev.disabled=next.disabled=true;dialog.classList.add('album-opening');const el=cover();await animate(el,[{transform:'rotateY(0deg)'},{transform:'rotateY(-180deg)'}]);el.remove();dialog.classList.remove('album-opening');turning=false;updateNavigation();};
  const close=async()=>{if(closing||turning)return;closing=true;prev.disabled=next.disabled=true;dialog.classList.add('album-closing');const el=cover();await animate(el,[{transform:'rotateY(-180deg)'},{transform:'rotateY(0deg)'}]);await animate(dialog,[{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(18px)'}],matchMedia('(prefers-reduced-motion:reduce)').matches?1:220);el.remove();dialog.classList.remove('album-closing');dialog.getAnimations().forEach(a=>a.cancel());dialog.close();closing=false;};
  document.getElementById('close-album').onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('close',()=>{document.body.classList.remove('album-open');opener?.focus();});
  prev.onclick=()=>turn(-1);next.onclick=()=>turn(1);dialog.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();turn(-1);}if(e.key==='ArrowRight'){e.preventDefault();turn(1);}});

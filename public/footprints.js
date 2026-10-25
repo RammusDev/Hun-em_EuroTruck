@@ -10,22 +10,23 @@
  async function drawList(){
   const request=++listRequest;listController?.abort();listController=new AbortController();status.textContent='正在翻閱足跡…';prev.disabled=next.disabled=true;
   try{const apiPage=Math.floor(page*perPage()/12),key=selected||String(apiPage);let data=bookCache.get(key);if(!data){data=await get(selected?{id:selected}:{page:String(apiPage),...(clusterArea?{area:clusterArea.join(',')}:{})},listController.signal);if(request===listRequest)bookCache.set(key,data);}if(request!==listRequest||!dialog.open)return;
-   list.replaceChildren();total.textContent=`${data.overallTotal??data.total} 個景點`;
+   const cards=[];total.textContent=`${data.overallTotal??data.total} 個景點`;
    const offset=selected?0:(page*perPage())%12;for(const row of data.items.slice(offset,offset+(selected?1:perPage()))){const card=el('article');card.className='footprint-card album-page';const title=el('h3',row.name);card.append(title);
     if(row.image){const link=el('a');link.href=row.image.src;link.target='_blank';link.rel='noopener';link.setAttribute('aria-label','開啟'+row.name+'速寫原圖');const img=el('img');img.src=row.image.src;img.alt=row.name+'專屬旅行速寫';img.loading='lazy';img.decoding='async';img.width=row.image.width;img.height=row.image.height;link.append(img);card.append(link,el('p','點圖查看原圖'));}
     else{const pending=el('div','已留下足跡，專屬速寫待繪製');pending.className='footprint-pending';card.append(pending);}
     card.append(el('p',`${row.visits.length} 次參觀 · 柏林時間`));
     const history=el('details');history.append(el('summary','每次參觀紀錄'));for(const at of row.visits){const time=el('time',fmt.format(at)+' 參觀過');time.dateTime=new Date(at).toISOString();history.append(time);}card.append(history);
     if(!row.p)card.append(el('small','原紀錄未保存精確座標，暫不標在地圖上。'));
-    list.append(card);
+    cards.push(card);
    }
+   await window.HunemDialogPaging?.prepare(cards);if(request!==listRequest||!dialog.open)return;list.replaceChildren(...cards);list.scrollTop=0;
    status.textContent=data.total?(selected?'景點參觀紀錄':`第 ${page+1} / ${Math.ceil(data.total/perPage())} 頁 · 共 ${data.total} 個景點`):'第一個旅行足跡還在路上。';prev.disabled=selected?page===0:page===0;next.disabled=!!selected||(page+1)*perPage()>=data.total;
   }catch(e){if(request!==listRequest||e.name==='AbortError')return;status.textContent=e.message;const retry=el('button','重新載入');retry.type='button';retry.onclick=drawList;list.replaceChildren(retry);}
  }
  function open(id=null,source=null,area=null){bookCache.clear();selected=id;clusterArea=area;page=0;opener=source||document.getElementById('open-footprints');if(!dialog.open)dialog.showModal();document.body.classList.add('footprints-open');drawList();}
  document.getElementById('open-footprints').onclick=e=>open(null,e.currentTarget);
  document.getElementById('close-footprints').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{document.body.classList.remove('footprints-open');listRequest++;listController?.abort();list.replaceChildren();opener?.focus();});
- prev.onclick=()=>{if(page>0){page--;drawList();dialog.scrollTop=0;}};next.onclick=()=>{if(!next.disabled){page++;drawList();dialog.scrollTop=0;}};
+ prev.onclick=()=>{if(page>0){page--;drawList();}};next.onclick=()=>{if(!next.disabled){page++;drawList();}};
  function turn(direction){if(direction<0){if(!prev.disabled)prev.onclick();}else if(!next.disabled)next.onclick();}
  dialog.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();turn(event.key==='ArrowLeft'?-1:1);}});
  let touch=null;list.addEventListener('touchstart',event=>{if(event.target.closest('a,button,details'))return;touch={x:event.changedTouches[0].clientX,y:event.changedTouches[0].clientY};},{passive:true});

@@ -1,0 +1,26 @@
+
+/* Only the middle panel scrolls. Navigation never moves with page contents. */
+#album-dialog[open],#collections-dialog[open],#footprints-dialog[open]{display:grid;height:min(820px,94dvh);max-height:94dvh;overflow:hidden;box-sizing:border-box;}
+#collections-dialog[open],#footprints-dialog[open]{grid-template-rows:auto auto minmax(0,1fr) 74px;}
+#album-dialog[open]{grid-template-rows:auto minmax(0,1fr) 70px auto;}
+#album-dialog>.album-toolbar{grid-row:1;}
+#album-dialog>.album-desk,#album-dialog>#album-empty{grid-row:2;min-height:0;overflow:auto;scrollbar-gutter:stable both-edges;overscroll-behavior:contain;overflow-anchor:none;}
+#album-dialog:has(#album-empty:not([hidden]))>.album-desk{display:none;}
+#album-dialog>.album-navigation{grid-row:3;}
+#album-dialog>.album-note{grid-row:4;margin:0 18px 12px;}
+#collections-list.album-book,#footprints-list.album-book{grid-row:3;min-height:0;min-width:0;overflow:auto;scrollbar-gutter:stable both-edges;overscroll-behavior:contain;overflow-anchor:none;align-content:start;margin-bottom:8px;}
+#collections-list:empty,#footprints-list:empty{display:block;}
+#collections-dialog>.collections-toolbar,#footprints-dialog>.footprints-toolbar{grid-row:1;}
+#collections-dialog>.collections-note,#footprints-dialog>.footprints-note{grid-row:2;}
+#collections-dialog>.collections-nav,#footprints-dialog>.footprints-nav{grid-row:4;}
+#album-dialog>.album-navigation,#collections-dialog>.collections-nav,#footprints-dialog>.footprints-nav{position:relative;z-index:5;min-height:0;margin:0;padding:10px 16px;box-sizing:border-box;background:#e7e6da;border-top:1px solid #cecdbb;display:grid;grid-template-columns:108px minmax(0,1fr) 108px;gap:12px;align-items:center;}
+#album-dialog .album-navigation button,#collections-dialog .collections-nav button,#footprints-dialog .footprints-nav button{width:100%;min-width:0;height:44px;padding:6px;}
+#album-counter,#collections-status,#footprints-status{min-width:0;margin:0;text-align:center;font-size:11px;line-height:1.5;overflow-wrap:anywhere;}
+#collections-list>.collection-card,#footprints-list>.footprint-card{animation:none;}
+#collections-list img,#footprints-list img{display:block;}
+@media(max-width:700px){
+ #album-dialog[open],#collections-dialog[open],#footprints-dialog[open]{height:94dvh;max-height:94dvh;}
+ #album-dialog>.album-navigation,#collections-dialog>.collections-nav,#footprints-dialog>.footprints-nav{grid-template-columns:80px minmax(0,1fr) 80px;gap:8px;padding:10px;}
+ #album-counter,#collections-status,#footprints-status{font-size:10px;}
+ #collections-dialog>.collections-note,#footprints-dialog>.footprints-note{font-size:10px;line-height:1.6;margin-bottom:10px;}
+}
