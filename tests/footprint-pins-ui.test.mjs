@@ -18,5 +18,7 @@ test('Google photo pin embeds the image and points to the coordinate at 20,49',a
 });
 test('Leaflet uses a 40 by 50 pin with the same bottom anchor',()=>{
  const m=setup(false).make({id:'one',p:[11,48],count:1,image:{thumbnail:'/thumb.png'}});
- assert.deepEqual([...m.options.icon.iconSize],[40,50]);assert.deepEqual([...m.options.icon.iconAnchor],[20,49]);assert.equal(m.options.icon.html.className,'footprint-photo-pin');
+ assert.deepEqual([...m.options.icon.iconSize],[40,50]);assert.deepEqual([...m.options.icon.iconAnchor],[20,49]);assert.equal(m.options.icon.html.className,'footprint-single-pin');
 });
+
+test('photo pins have one visible outline without an inner stroked circle',()=>{const svg=setup(true).pinSvg('data:image/png;base64,aA==');assert.equal((svg.match(/stroke=/g)||[]).length,1);assert.doesNotMatch(svg,/<circle[^>]*stroke=/);});
