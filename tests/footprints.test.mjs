@@ -28,3 +28,9 @@ test('footprint readers may read but cannot upload; service requires publication
  assert.throws(()=>authorizeWorld({role:'service',scopes:['sync']},'POST','/api/footprints'));
  assert.equal(authorizeWorld({role:'service',scopes:['publication']},'POST','/api/footprints'),'service');
 });
+
+test('cluster identity tracks every member, is order-independent and is stable during fractional zoom',()=>{
+ const rows=[{id:'a',p:[11,48]},{id:'b',p:[11,48]},{id:'c',p:[11,48]}],bounds={west:10,east:12,south:47,north:49,zoom:19};
+ const a=mapFootprints(rows.slice(0,2),bounds)[0],b=mapFootprints([rows[0],rows[2]],bounds)[0];assert.notEqual(a.id,b.id);assert.equal(a.id,mapFootprints(rows.slice(0,2).reverse(),bounds)[0].id);assert.deepEqual(a.bounds,[11,48,11,48]);
+ assert.deepEqual(mapFootprints(rows,{...bounds,zoom:19.2}),mapFootprints(rows,{...bounds,zoom:19.9}));
+});

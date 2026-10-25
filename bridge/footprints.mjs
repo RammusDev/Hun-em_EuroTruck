@@ -28,9 +28,9 @@ export function mapFootprints(rows,{west,south,east,north,zoom=8}){
  const visible=rows.filter(r=>validPoint(r.p)&&r.p[1]>=south&&r.p[1]<=north&&(west<=east?r.p[0]>=west&&r.p[0]<=east:r.p[0]>=west||r.p[0]<=east));
  const pixel=p=>{const lat=Math.max(-85,Math.min(85,p[1]))*Math.PI/180;return [(p[0]+180)/360,(1-Math.log(Math.tan(lat)+1/Math.cos(lat))/Math.PI)/2];};
  let cell=64,groups;
- do{const bins=new Map(),scale=256*2**Math.max(0,Math.min(20,zoom));
+ do{const bins=new Map(),scale=256*2**Math.max(0,Math.min(22,Math.floor(zoom)));
   for(const r of visible){const p=pixel(r.p),k=Math.floor(p[0]*scale/cell)+','+Math.floor(p[1]*scale/cell);if(!bins.has(k))bins.set(k,[]);bins.get(k).push(r);}
   groups=[...bins.values()];cell*=2;
  }while(groups.length>100);
- return groups.map(g=>g.length===1?{...g[0],visits:undefined,count:1}:{id:'cluster:'+g[0].id,count:g.length,p:g[0].p,name:`${g.length} 個旅行足跡`});
+ return groups.map(g=>{if(g.length===1)return {...g[0],visits:undefined,count:1};const xs=g.map(r=>r.p[0]),ys=g.map(r=>r.p[1]);return {id:'cluster:'+createHash('sha256').update(g.map(r=>r.id).sort().join('\n')).digest('hex').slice(0,32),count:g.length,p:[xs.reduce((a,b)=>a+b,0)/g.length,ys.reduce((a,b)=>a+b,0)/g.length],bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)],name:`${g.length} 個旅行足跡`};});
 }

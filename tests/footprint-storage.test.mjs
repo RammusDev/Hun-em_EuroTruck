@@ -19,6 +19,7 @@ test('isolated D1/R2: pure reads, reviewed immutable original, 128px thumbnail, 
   const js=ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
   const api=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
   const row=footprintInventory(p)[0];await api.footprintRead(new URL('https://isolated.test/api/footprints'));
+  const area=await api.footprintRead(new URL('https://isolated.test/api/footprints?area=8,53,10,55'));assert.equal(area.total,1);assert.equal(area.overallTotal,1);assert.equal((await api.footprintRead(new URL('https://isolated.test/api/footprints?area=0,0,1,1'))).total,0);await assert.rejects(()=>api.footprintRead(new URL('https://isolated.test/api/footprints?area=bad')),/INVALID_BOUNDS/);
   assert.equal((await DB.prepare('SELECT COUNT(*) n FROM hunem_runtime').first()).n,0);assert.equal((await BUCKET.list()).objects.length,0);
   const image=png.PNG.sync.write({width:256,height:256,data:Buffer.alloc(256*256*4,255)}),review={tool:'image_gen.imagegen',actuallyCalled:true,landmarkRecognizable:true,originalGeneratedPath:'isolated-test-fixture.png'};
   await assert.rejects(()=>api.saveFootprint(row.id,image,{}),/REVIEW_REQUIRED/);
