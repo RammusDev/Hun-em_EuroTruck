@@ -26,5 +26,5 @@ body.footprints-open{overflow:hidden;}
 @media(max-width:700px){.footprints-toolbar{padding:18px;}.footprints-toolbar h2{font-size:22px;}.footprints-note{margin:0 18px 14px;}.footprints-list.album-book{grid-template-columns:minmax(0,1fr);margin:0 14px 18px;}.footprints-list.album-book::after{left:11px;transform:none;width:7px;}.footprint-card.album-page{padding:22px 20px 30px;}.footprints-nav{gap:8px;}.footprints-nav button{min-width:76px;font-size:12px;}.footprints-nav span{font-size:10px;}}
 
 /* A single continuous outline; Google and Leaflet share the same pin image. */
-.footprint-single-pin{width:40px;height:50px;background:transparent;border:0;}
-.footprint-marker .footprint-single-pin img{display:block;width:40px;height:50px;max-width:none;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;object-fit:contain;filter:drop-shadow(0 1px 1px #59442826);}
+.footprint-single-pin{width:44px;height:55px;background:transparent;border:0;}
+.footprint-marker .footprint-single-pin img{display:block;width:44px;height:55px;max-width:none;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;object-fit:contain;filter:drop-shadow(0 1px 1px #59442826);}

@@ -10,15 +10,15 @@ function setup(googleMode){
  vm.runInNewContext(source,{matchMedia:()=>({matches:false,addEventListener(){}}),document,window,google,L,Intl,Date,URLSearchParams,AbortController,encodeURIComponent,setTimeout(){},clearTimeout(){},fetch:async()=>({ok:true,blob:async()=>({})}),FileReader:class{readAsDataURL(){this.result='data:image/png;base64,aGVsbG8=';this.onload();}}});
  window.HunemFootprints.init({addListener(){},getPane:()=>true,on(){}},googleMode);return window.HunemFootprints;
 }
-test('Google photo pin embeds the image and points to the coordinate at 20,49',async()=>{
+test('Google photo pin embeds the image and points to the coordinate at 22,53.9',async()=>{
  const x=setup(true),marker=x.make({id:'one',name:'景點',p:[11,48],count:1,image:{thumbnail:'/thumb.png'}});
- assert.equal(marker.icon.scaledSize.width,40);assert.equal(marker.icon.scaledSize.height,50);assert.equal(marker.icon.anchor.y,49);
+ assert.equal(marker.icon.scaledSize.width,44);assert.equal(marker.icon.scaledSize.height,55);assert.equal(marker.icon.anchor.y,53.9);
  await new Promise(r=>setImmediate(r));assert.match(decodeURIComponent(marker.icon.url),/image\/png;base64/);assert.match(decodeURIComponent(marker.icon.url),/clip-path/);
  const cluster=x.make({id:'cluster',p:[11,48],count:3});assert.equal(cluster.icon.scale,19);assert.equal(cluster.label.text,'3');
 });
-test('Leaflet uses a 40 by 50 pin with the same bottom anchor',()=>{
+test('Leaflet uses a 44 by 55 pin with the same proportional bottom anchor',()=>{
  const m=setup(false).make({id:'one',p:[11,48],count:1,image:{thumbnail:'/thumb.png'}});
- assert.deepEqual([...m.options.icon.iconSize],[40,50]);assert.deepEqual([...m.options.icon.iconAnchor],[20,49]);assert.equal(m.options.icon.html.className,'footprint-single-pin');
+ assert.deepEqual([...m.options.icon.iconSize],[44,55]);assert.deepEqual([...m.options.icon.iconAnchor],[22,53.9]);assert.equal(m.options.icon.html.className,'footprint-single-pin');
 });
 
 test('photo pins have one visible outline without an inner stroked circle',()=>{const svg=setup(true).pinSvg('data:image/png;base64,aA==');assert.equal((svg.match(/stroke=/g)||[]).length,1);assert.doesNotMatch(svg,/<circle[^>]*stroke=/);});
