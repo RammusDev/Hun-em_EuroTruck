@@ -4,6 +4,9 @@
  const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
  const fmt=new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  let kind='meal',page=0,opener,request=0,controller,lastSummary=0,summaryPending=false,heldKey;
+ let citiesInput,cityNames=new Map();
+ function updateCities(cities){if(cities===citiesInput)return;citiesInput=cities;cityNames=new Map((Array.isArray(cities)?cities:[]).filter(city=>city.id&&city.name).map(city=>[city.id,city.name]));}
+ function locationName(value){const raw=typeof value==='string'?value:value?.name||value?.id;if(!raw)return '';return cityNames.get(raw)||(/^[a-z0-9]+(?:[-_:][a-z0-9]+)*$/.test(raw)?'':raw);}
  async function get(params,signal){const r=await fetch('/api/collections?'+new URLSearchParams(params),{cache:'no-store',signal});if(!r.ok)throw Error('紀錄暫時無法載入，請稍後重試。');return r.json();}
  function card(row){
   const e=node('article');e.className='collection-card';e.append(node('h3',row.name));
@@ -13,9 +16,9 @@
   else{const note=node('p','保留餐次文字紀錄');note.className='collection-text-note';e.append(note);}
   e.append(node('p',`${kind==='meal'?'吃過':'購買'} ${row.count} 次 · 柏林時間`));
   const history=node('details');history.append(node('summary','每次紀錄'));const meals={breakfast:'早餐',lunch:'午餐',dinner:'晚餐'};
-  for(const occurrence of row.occurrences||[]){const line=node('p'),d=new Date(occurrence.time),time=node('time',Number.isNaN(+d)?'時間未保存':fmt.format(d));if(!Number.isNaN(+d))time.dateTime=d.toISOString();const location=typeof occurrence.location==='string'?occurrence.location:occurrence.location?.name;line.append(time,document.createTextNode(' · '+(kind==='soda'?'購買':(meals[occurrence.meal]||'用餐完成'))+(location?' · '+location:'')));history.append(line);}
+  for(const occurrence of row.occurrences||[]){const line=node('p'),d=new Date(occurrence.time),time=node('time',Number.isNaN(+d)?'時間未保存':fmt.format(d));if(!Number.isNaN(+d))time.dateTime=d.toISOString();const location=locationName(occurrence.location);line.append(time,document.createTextNode(' · '+(kind==='soda'?'購買':(meals[occurrence.meal]||'用餐完成'))+(location?' · '+location:'')));history.append(line);}
   e.append(history);
-  const raw=typeof row.source==='string'?row.source:row.source?.url;if(kind==='meal'&&row.localDish&&raw){try{const u=new URL(raw);if(['https:','http:'].includes(u.protocol)){const a=node('a','料理資料來源 ↗');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';e.append(a);}}catch{}}
+  const raw=typeof row.source==='string'?row.source:row.source?.url;if((kind==='soda'||row.localDish)&&raw){try{const u=new URL(raw);if(['https:','http:'].includes(u.protocol)){const a=node('a',kind==='soda'?'產品資料來源 ↗':'料理資料來源 ↗');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';e.append(a);}}catch{}}
   return e;
  }
  async function draw(){const id=++request;controller?.abort();controller=new AbortController();list.setAttribute('aria-busy','true');status.textContent='正在翻閱紀錄…';prev.disabled=next.disabled=true;
@@ -27,5 +30,5 @@
  $('open-meals').onclick=e=>open('meal',e);$('open-sodas').onclick=e=>open('soda',e);$('close-collections').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{request++;controller?.abort();list.replaceChildren();list.removeAttribute('aria-busy');opener?.focus();});
  prev.onclick=()=>{if(page>0){page--;draw();dialog.scrollTop=0;}};next.onclick=()=>{if(!next.disabled){page++;draw();dialog.scrollTop=0;}};
  function updateHeld(held){const key=JSON.stringify(held||null);if(key===heldKey)return;heldKey=key;$('sodas-held').textContent=held?'目前持有：'+held.name+(held.flavour?' · '+held.flavour:''):'目前沒有持有汽水';}
- window.HunemCollections={updateHeld,refresh(){if(summaryPending||Date.now()-lastSummary<60000)return;lastSummary=Date.now();summaryPending=true;get({mode:'summary'}).then(data=>{$('meals-total').textContent=`${data.meal.total} 道 · ${data.meal.totalOccurrences} 餐`;$('sodas-total').textContent=`${data.soda.total} 款 · 購買 ${data.soda.totalOccurrences} 次`;if(dialog.open)draw();}).catch(()=>{$('meals-total').textContent='點開查看紀錄';$('sodas-total').textContent='點開查看圖鑑';}).finally(()=>{summaryPending=false;});}};
+ window.HunemCollections={updateCities,updateHeld,refresh(){if(summaryPending||Date.now()-lastSummary<60000)return;lastSummary=Date.now();summaryPending=true;get({mode:'summary'}).then(data=>{$('meals-total').textContent=`${data.meal.total} 道 · ${data.meal.totalOccurrences} 餐`;$('sodas-total').textContent=`${data.soda.total} 款 · 購買 ${data.soda.totalOccurrences} 次`;if(dialog.open)draw();}).catch(()=>{$('meals-total').textContent='點開查看紀錄';$('sodas-total').textContent='點開查看圖鑑';}).finally(()=>{summaryPending=false;});}};
 })();

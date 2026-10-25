@@ -39,3 +39,8 @@ test('stale meal response cannot overwrite soda list and closing cancels renderi
 test('failed page offers retry without losing ability to close',async()=>{
  const x=setup();x.open('meals');x.requests[0].reject(Error('網路中斷'));await tick();assert.equal(x.ids['collections-status'].textContent,'網路中斷');x.ids['collections-list'].children[0].onclick();assert.equal(x.requests.length,2);x.ids['close-collections'].onclick();assert.ok(x.ids['open-meals'].focused);
 });
+test('city IDs become display names; unknown IDs are omitted and soda sources stay safe',async()=>{
+ const x=setup();x.window.HunemCollections.updateCities([{id:'at-kufstein',name:'庫夫施泰因'}]);x.open('sodas');
+ x.requests[0].resolve(data([row({name:'汽水',source:'https://example.com/product',occurrences:[{time:1792832400000,location:'at-kufstein'},{time:1792832400000,location:'de-unknown'}]}),row({source:'javascript:alert(1)'})]));await tick();
+ const card=x.ids['collections-list'].children[0],history=card.children.find(e=>e.tagName==='details');assert.match(history.children[1].children[1].textContent,/庫夫施泰因/);assert.doesNotMatch(history.children[2].children[1].textContent,/de-unknown/);assert.equal(card.children.find(e=>e.tagName==='a').textContent,'產品資料來源 ↗');assert.ok(!x.ids['collections-list'].children[1].children.some(e=>e.tagName==='a'));
+});
