@@ -8,3 +8,22 @@
 .footprint-photo-pin,.footprint-marker .footprint-pin{position:relative;width:40px;height:40px;border:1.5px solid #92754a;border-radius:50%;background:#fbf4e3;box-shadow:0 2px 5px #392b3026;}
 .footprint-photo-pin::before,.footprint-marker .footprint-pin::before{content:'';position:absolute;left:10px;top:33px;width:17px;height:17px;background:#fbf4e3;border-right:1.5px solid #92754a;border-bottom:1.5px solid #92754a;transform:rotate(45deg);z-index:-1;}
 .footprint-photo-pin img{position:relative;width:34px;height:34px;margin:1.5px;border:1px solid #c7af78;border-radius:50%;background:#fffaf1;object-fit:contain;box-shadow:none;}
+
+/* Footprints use the same two-page notebook as meals and sodas. */
+body.footprints-open{overflow:hidden;}
+.footprints-dialog{width:min(1120px,96vw);max-height:94dvh;padding:0;border-radius:9px;background:#e7e6da;color:#3e4937;}
+.footprints-dialog::backdrop{background:#1d2b26b8;backdrop-filter:blur(5px);}
+.footprints-note{margin:0 30px 18px;font-size:11px;}
+.footprints-list.album-book{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:0 30px 20px;padding:10px 11px 14px;}
+.footprints-list:empty{display:none;}
+.footprint-card.album-page{border:0;padding:24px 26px 32px;min-width:0;overflow-wrap:anywhere;}
+.footprint-card:nth-child(odd){background-image:linear-gradient(90deg,transparent 80%,#a18c5820);}
+.footprint-card h3{font:500 20px/1.6 'Noto Serif TC',serif;margin:0 0 10px;color:#57482f;}
+.footprint-card img{max-height:310px;width:100%;height:auto;aspect-ratio:1;object-fit:contain;background:transparent;}
+.footprint-card p,.footprint-card details{font-size:12px;line-height:1.9;}
+.footprint-card summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:6px;}.footprint-card summary::before{content:'▸';}.footprint-card details[open] summary::before{content:'▾';}
+.footprint-card time{font-size:12px;border-top:1px solid #d9ccb2;padding:8px 0;}
+.footprint-pending{min-height:190px;aspect-ratio:auto;padding:14px;text-align:center;border:1px dashed #d6c8a7;background:#eee5d355;line-height:1.9;}
+.footprints-nav{margin:0;padding:0 20px 20px;}.footprints-nav span{min-width:0;overflow-wrap:anywhere;}
+@media(prefers-reduced-motion:no-preference){.footprint-card{animation:collection-arrive .25s ease-out;}}
+@media(max-width:700px){.footprints-toolbar{padding:18px;}.footprints-toolbar h2{font-size:22px;}.footprints-note{margin:0 18px 14px;}.footprints-list.album-book{grid-template-columns:minmax(0,1fr);margin:0 14px 18px;}.footprints-list.album-book::after{left:11px;transform:none;width:7px;}.footprint-card.album-page{padding:22px 20px 30px;}.footprints-nav{gap:8px;}.footprints-nav button{min-width:76px;font-size:12px;}.footprints-nav span{font-size:10px;}}

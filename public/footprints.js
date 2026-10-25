@@ -1,29 +1,36 @@
 (()=>{
  const dialog=document.getElementById('footprints-dialog'),list=document.getElementById('footprints-list'),status=document.getElementById('footprints-status'),prev=document.getElementById('footprints-prev'),next=document.getElementById('footprints-next'),total=document.getElementById('footprints-total');
  if(!dialog)return;
+ const mobile=matchMedia('(max-width:700px)'),perPage=()=>mobile.matches?1:2,bookCache=new Map();
+ let listController;
  let map,googleMode=false,markers=new Map(),timer,lastRefresh=0,page=0,selected=null,listRequest=0,mapRequest=0,mapController,opener;
  const fmt=new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  const el=(tag,text)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
  async function get(params,signal){const r=await fetch('/api/footprints?'+new URLSearchParams(params),{signal,cache:'no-store'});if(!r.ok)throw Error('足跡暫時無法載入，請稍後重試。');return r.json();}
  async function drawList(){
-  const request=++listRequest;status.textContent='正在翻閱足跡…';prev.disabled=next.disabled=true;
-  try{const data=await get(selected?{id:selected}:{page:String(page)});if(request!==listRequest)return;
+  const request=++listRequest;listController?.abort();listController=new AbortController();status.textContent='正在翻閱足跡…';prev.disabled=next.disabled=true;
+  try{const apiPage=Math.floor(page*perPage()/12),key=selected||String(apiPage);let data=bookCache.get(key);if(!data){data=await get(selected?{id:selected}:{page:String(apiPage)},listController.signal);if(request===listRequest)bookCache.set(key,data);}if(request!==listRequest||!dialog.open)return;
    list.replaceChildren();total.textContent=`${data.total} 個景點`;
-   for(const row of data.items){const card=el('article');card.className='footprint-card';const title=el('h3',row.name);card.append(title);
+   const offset=selected?0:(page*perPage())%12;for(const row of data.items.slice(offset,offset+(selected?1:perPage()))){const card=el('article');card.className='footprint-card album-page';const title=el('h3',row.name);card.append(title);
     if(row.image){const link=el('a');link.href=row.image.src;link.target='_blank';link.rel='noopener';link.setAttribute('aria-label','開啟'+row.name+'速寫原圖');const img=el('img');img.src=row.image.src;img.alt=row.name+'專屬旅行速寫';img.loading='lazy';img.decoding='async';img.width=row.image.width;img.height=row.image.height;link.append(img);card.append(link,el('p','點圖查看原圖'));}
     else{const pending=el('div','已留下足跡，專屬速寫待繪製');pending.className='footprint-pending';card.append(pending);}
     card.append(el('p',`${row.visits.length} 次參觀 · 柏林時間`));
-    for(const at of row.visits){const time=el('time',fmt.format(at)+' 參觀過');time.dateTime=new Date(at).toISOString();card.append(time);}
+    const history=el('details');history.append(el('summary','每次參觀紀錄'));for(const at of row.visits){const time=el('time',fmt.format(at)+' 參觀過');time.dateTime=new Date(at).toISOString();history.append(time);}card.append(history);
     if(!row.p)card.append(el('small','原紀錄未保存精確座標，暫不標在地圖上。'));
     list.append(card);
    }
-   status.textContent=data.total?(selected?'景點參觀紀錄':`第 ${page+1} 頁 · 共 ${data.total} 個景點`):'第一個旅行足跡還在路上。';prev.disabled=selected?page===0:page===0;next.disabled=!!selected||!data.hasMore;
-  }catch(e){if(request!==listRequest)return;status.textContent=e.message;const retry=el('button','重新載入');retry.type='button';retry.onclick=drawList;list.replaceChildren(retry);}
+   status.textContent=data.total?(selected?'景點參觀紀錄':`第 ${page+1} / ${Math.ceil(data.total/perPage())} 頁 · 共 ${data.total} 個景點`):'第一個旅行足跡還在路上。';prev.disabled=selected?page===0:page===0;next.disabled=!!selected||(page+1)*perPage()>=data.total;
+  }catch(e){if(request!==listRequest||e.name==='AbortError')return;status.textContent=e.message;const retry=el('button','重新載入');retry.type='button';retry.onclick=drawList;list.replaceChildren(retry);}
  }
- function open(id=null,source=null){selected=id;page=0;opener=source||document.getElementById('open-footprints');if(!dialog.open)dialog.showModal();drawList();}
+ function open(id=null,source=null){bookCache.clear();selected=id;page=0;opener=source||document.getElementById('open-footprints');if(!dialog.open)dialog.showModal();document.body.classList.add('footprints-open');drawList();}
  document.getElementById('open-footprints').onclick=e=>open(null,e.currentTarget);
- document.getElementById('close-footprints').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{listRequest++;list.replaceChildren();opener?.focus();});
- prev.onclick=()=>{if(page>0){page--;drawList();dialog.scrollTop=0;}};next.onclick=()=>{page++;drawList();dialog.scrollTop=0;};
+ document.getElementById('close-footprints').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{document.body.classList.remove('footprints-open');listRequest++;listController?.abort();list.replaceChildren();opener?.focus();});
+ prev.onclick=()=>{if(page>0){page--;drawList();dialog.scrollTop=0;}};next.onclick=()=>{if(!next.disabled){page++;drawList();dialog.scrollTop=0;}};
+ function turn(direction){if(direction<0){if(!prev.disabled)prev.onclick();}else if(!next.disabled)next.onclick();}
+ dialog.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();turn(event.key==='ArrowLeft'?-1:1);}});
+ let touch=null;list.addEventListener('touchstart',event=>{if(event.target.closest('a,button,details'))return;touch={x:event.changedTouches[0].clientX,y:event.changedTouches[0].clientY};},{passive:true});
+ list.addEventListener('touchend',event=>{if(!touch)return;const dx=event.changedTouches[0].clientX-touch.x,dy=event.changedTouches[0].clientY-touch.y;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.5)turn(dx<0?1:-1);touch=null;},{passive:true});
+ mobile.addEventListener('change',()=>{page=0;if(dialog.open)drawList();});
  function remove(m){if(googleMode)m.setMap(null);else map.removeLayer(m);}
  const pinImages=new Map();
  function pinSvg(image=''){return '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50"><defs><clipPath id="photo"><circle cx="20" cy="20" r="16"/></clipPath></defs><path d="M20 49 10 34a19 19 0 1 1 20 0Z" fill="#fbf4e3" stroke="#92754a" stroke-width="1.5"/><circle cx="20" cy="20" r="16.5" fill="#fffaf1" stroke="#c7af78"/>'+ (image?'<image href="'+image+'" x="4" y="4" width="32" height="32" preserveAspectRatio="xMidYMid meet" clip-path="url(#photo)"/>':'<text x="20" y="26" font-size="20" text-anchor="middle" fill="#92754a">✧</text>')+'</svg>';}
@@ -45,5 +52,5 @@
   }catch(e){if(e.name!=='AbortError')total.textContent='暫時無法載入';}
  }
  const schedule=()=>{clearTimeout(timer);timer=setTimeout(drawMap,250);};
- window.HunemFootprints={init(m,g){if(map)return;map=m;googleMode=g;if(g)map.addListener('idle',schedule);else{if(!map.getPane('footprints')){map.createPane('footprints');map.getPane('footprints').style.zIndex=590;}map.on('moveend zoomend',schedule);}schedule();},refresh(){if(Date.now()-lastRefresh<60000)return;lastRefresh=Date.now();schedule();if(dialog.open)drawList();}};
+ window.HunemFootprints={init(m,g){if(map)return;map=m;googleMode=g;if(g)map.addListener('idle',schedule);else{if(!map.getPane('footprints')){map.createPane('footprints');map.getPane('footprints').style.zIndex=590;}map.on('moveend zoomend',schedule);}schedule();},refresh(){if(Date.now()-lastRefresh<60000)return;lastRefresh=Date.now();schedule();if(dialog.open){bookCache.clear();drawList();}}};
 })();

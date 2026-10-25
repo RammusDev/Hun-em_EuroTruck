@@ -7,7 +7,7 @@ function setup(googleMode){
  const nodes=new Map(),document={getElementById(id){if(!nodes.has(id))nodes.set(id,{addEventListener(){}});return nodes.get(id);},createElement(){return {append(){}};}};
  const window={},google={maps:{Size:class{constructor(w,h){this.width=w;this.height=h;}},Point:class{constructor(x,y){this.x=x;this.y=y;}},SymbolPath:{CIRCLE:'circle'},Marker:class{constructor(options){Object.assign(this,options);}addListener(){}getMap(){return this.map;}setIcon(icon){this.icon=icon;}}}};
  const L={divIcon:options=>options,marker:(p,options)=>({options,addTo(){return this;},bindTooltip(){return this;},on(){}})};
- vm.runInNewContext(source,{document,window,google,L,Intl,Date,URLSearchParams,AbortController,encodeURIComponent,setTimeout(){},clearTimeout(){},fetch:async()=>({ok:true,blob:async()=>({})}),FileReader:class{readAsDataURL(){this.result='data:image/png;base64,aGVsbG8=';this.onload();}}});
+ vm.runInNewContext(source,{matchMedia:()=>({matches:false,addEventListener(){}}),document,window,google,L,Intl,Date,URLSearchParams,AbortController,encodeURIComponent,setTimeout(){},clearTimeout(){},fetch:async()=>({ok:true,blob:async()=>({})}),FileReader:class{readAsDataURL(){this.result='data:image/png;base64,aGVsbG8=';this.onload();}}});
  window.HunemFootprints.init({addListener(){},getPane:()=>true,on(){}},googleMode);return window.HunemFootprints;
 }
 test('Google photo pin embeds the image and points to the coordinate at 20,49',async()=>{
