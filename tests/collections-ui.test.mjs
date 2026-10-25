@@ -13,7 +13,7 @@ class Element{
 function setup(){
  const ids=Object.fromEntries(['collections-dialog','collections-list','collections-status','collections-prev','collections-next','collections-title','collections-note','open-meals','open-sodas','close-collections','sodas-held','meals-total','sodas-total'].map(id=>[id,new Element()]));
  const requests=[],window={};let now=100000;
- vm.runInNewContext(script,{document:{getElementById:id=>ids[id],createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text})},window,Intl,URL,URLSearchParams,AbortController,Date:class extends Date{static now(){return now;}},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve:data=>resolve({ok:true,json:async()=>data}),reject}))});
+ vm.runInNewContext(script,{matchMedia:()=>({matches:false,addEventListener(){}}),document:{body:{classList:{add(){},remove(){}}},getElementById:id=>ids[id],createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text})},window,Intl,URL,URLSearchParams,AbortController,Date:class extends Date{static now(){return now;}},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve:data=>resolve({ok:true,json:async()=>data}),reject}))});
  return{ids,window,requests,advance:()=>{now+=60001;},open:kind=>ids['open-'+kind].onclick({currentTarget:ids['open-'+kind]})};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -38,6 +38,15 @@ test('stale meal response cannot overwrite soda list and closing cancels renderi
 });
 test('failed page offers retry without losing ability to close',async()=>{
  const x=setup();x.open('meals');x.requests[0].reject(Error('網路中斷'));await tick();assert.equal(x.ids['collections-status'].textContent,'網路中斷');x.ids['collections-list'].children[0].onclick();assert.equal(x.requests.length,2);x.ids['close-collections'].onclick();assert.ok(x.ids['open-meals'].focused);
+});
+
+test('two-page spreads use cached records and fetch across the API page boundary',async()=>{
+ const x=setup();x.open('meals');x.requests[0].resolve({items:Array.from({length:12},(_,i)=>row({name:'餐點'+i})),total:14,totalOccurrences:14,hasMore:true});await tick();
+ assert.equal(x.ids['collections-list'].children.length,2);
+ for(let i=0;i<5;i++){x.ids['collections-next'].onclick();await tick();}
+ assert.equal(x.requests.length,1);assert.equal(x.ids['collections-list'].children[0].children[0].textContent,'餐點10');
+ x.ids['collections-next'].onclick();assert.match(x.requests[1].url,/page=1/);x.requests[1].resolve({items:[row({name:'餐點12'}),row({name:'餐點13'})],total:14,totalOccurrences:14,hasMore:false});await tick();
+ assert.equal(x.ids['collections-next'].disabled,true);x.ids['collections-prev'].onclick();await tick();assert.equal(x.requests.length,2);assert.equal(x.ids['collections-list'].children[0].children[0].textContent,'餐點10');
 });
 test('city IDs become display names; unknown IDs are omitted and soda sources stay safe',async()=>{
  const x=setup();x.window.HunemCollections.updateCities([{id:'at-kufstein',name:'庫夫施泰因'}]);x.open('sodas');
