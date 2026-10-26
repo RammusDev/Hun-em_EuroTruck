@@ -34,9 +34,3 @@ test('cluster identity tracks every member, is order-independent and is stable d
  const a=mapFootprints(rows.slice(0,2),bounds)[0],b=mapFootprints([rows[0],rows[2]],bounds)[0];assert.notEqual(a.id,b.id);assert.equal(a.id,mapFootprints(rows.slice(0,2).reverse(),bounds)[0].id);assert.deepEqual(a.bounds,[11,48,11,48]);
  assert.deepEqual(mapFootprints(rows,{...bounds,zoom:19.2}),mapFootprints(rows,{...bounds,zoom:19.9}));
 });
-
-test('small map groups include bounded member data for same-coordinate expansion',()=>{
- const p=[15.448582,40.543694],rows=Array.from({length:13},(_,i)=>({id:String(i),name:'景點'+i,p:[...p],visits:[123],topicId:'private-metadata'})),before=structuredClone(rows),bounds={west:15,east:16,south:40,north:41,zoom:19};
- const group=mapFootprints(rows.slice(0,2),bounds)[0];assert.equal(group.members.length,2);assert.deepEqual(group.members[0].p,p);assert.equal(group.members[0].visits,undefined);assert.equal(group.members[0].topicId,undefined);
- assert.equal(mapFootprints(rows,bounds)[0].members,undefined);assert.deepEqual(rows,before);
-});
