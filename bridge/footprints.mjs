@@ -1,5 +1,6 @@
 // Read-only projection. Never enters the minute-by-minute event planner.
 import {createHash} from 'node:crypto';
+import {correctFootprintCoordinates} from './footprint-coordinate-corrections.mjs';
 export const footprintId=(world,id)=>createHash('sha256').update(world+'\n'+id).digest('hex').slice(0,32);
 export const validPoint=p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&Math.abs(p[0])<=180&&Math.abs(p[1])<=90;
 export function footprintInventory(payload,now=Date.now()){
@@ -21,7 +22,7 @@ export function footprintInventory(payload,now=Date.now()){
   const id=footprintId(world.publicationWorldId,String(v.topicId||v.id));
   if(!found.has(id))for(const time of new Set([v.firstSeenAt,v.lastSeenAt]))add({type:'visit',time,location:v.town,place:{topicId:v.topicId||v.id,name:v.name,source:v.source}});
  }
- return [...found.values()].map(r=>({...r,visits:r.visits.sort((a,b)=>b-a),firstSeenAt:Math.min(...r.visits),lastSeenAt:Math.max(...r.visits)})).sort((a,b)=>b.lastSeenAt-a.lastSeenAt||a.id.localeCompare(b.id));
+ return correctFootprintCoordinates([...found.values()].map(r=>({...r,visits:r.visits.sort((a,b)=>b-a),firstSeenAt:Math.min(...r.visits),lastSeenAt:Math.max(...r.visits)})).sort((a,b)=>b.lastSeenAt-a.lastSeenAt||a.id.localeCompare(b.id)));
 }
 export function mapFootprints(rows,{west,south,east,north,zoom=8}){
  if(![west,south,east,north,zoom].every(Number.isFinite)||south>north||south< -90||north>90||Math.abs(west)>180||Math.abs(east)>180)throw Error('INVALID_BOUNDS');
