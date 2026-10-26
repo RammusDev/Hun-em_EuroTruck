@@ -1,5 +1,5 @@
 // A view of the immutable archive. Never replaces or modifies the original input.
-import {dailyCoverageInstruction,illustrationSceneInstruction} from './writing-coverage.mjs';
+import {dailyCoverageInstruction,illustrationSceneInstruction,multilingualWritingInstruction} from './writing-coverage.mjs';
 export {illustrationSceneInstruction} from './writing-coverage.mjs';
 export const illustrationFormatInstruction="相簿尺寸基準為第一幅2026-10-18旅行速寫（1254×1254）：新圖固定1:1正方形PNG；解析度可依imagegen原生輸出，但寬高必須相同。採滿版場景，背景延伸至四邊，不加白色邊框、信箱式留白、額外紙張邊界或把小幅畫置於大畫布。角色仍依hunem-reference-v2；尺寸基準不代表複製第一幅的姿勢或場景。";
 const clone=x=>structuredClone(x);
@@ -16,7 +16,7 @@ export function creativeCharacter(markdown){
 export function writingPacket(input){
  return {
   version:3,flowVersion:publicationFlowVersion,id:input.id,day:input.day,character:creativeCharacter(input.character),characterRevision:input.characterRevision,
-  writingInstruction:input.writingInstruction.includes(dailyCoverageInstruction)?input.writingInstruction:input.writingInstruction+'\n'+dailyCoverageInstruction,writingPolicy:clone(input.curriculum?.writingPolicy||{}),
+  writingInstruction:[input.writingInstruction,...[dailyCoverageInstruction,multilingualWritingInstruction].filter(rule=>!input.writingInstruction.includes(rule))].join('\n'),writingPolicy:clone(input.curriculum?.writingPolicy||{}),
   learningPlan:clone(input.learningPlan),
   events:input.events.map(e=>Object.fromEntries(Object.entries(e).filter(([k])=>k!=='quote'))),
   writingContext:clone(input.writingContext),
