@@ -15,7 +15,7 @@ import {footprintEvents} from '../../lib/footprint-events';
 import {collectionEvents} from '../../lib/collection-events';
 import {collectionEventDefinitions,collectionEventNames} from '../../bridge/collection-events.mjs';
 import {collectionTools} from '../../bridge/collection-tools.mjs';
-import {collectionQueue,claimCollection,saveCollection} from '../../lib/collections';
+import {collectionQueueContent as collectionQueue,claimCollection,saveCollection} from '../../lib/collections';
 export const dynamic='force-dynamic';
 export async function POST(req:Request){
  if(Number(req.headers.get('content-length')||0)>131072)return new Response('Request too large',{status:413});

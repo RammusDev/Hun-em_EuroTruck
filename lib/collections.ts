@@ -4,6 +4,7 @@ import {collectionInventory,collectionKinds} from '../bridge/collections.mjs';
 import {pngReceipt} from '../bridge/mcp-file.mjs';
 import {makeReferencePreview} from '../bridge/reference-preview.mjs';
 import {validateCollectionImage} from '../bridge/collection-image.mjs';
+import {collectionReference,collectionReferenceResult,referenceMime} from '../bridge/collection-reference.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const valid=(kind:string,id?:string)=>{if(!collectionKinds.includes(kind)||id!==undefined&&!/^[a-f0-9]{32}$/.test(id))throw Error('INVALID_COLLECTION');};
 export async function collectionRows(kind:string,p?:any){
@@ -23,6 +24,14 @@ export async function collectionRead(u:URL){
 }
 export const collectionInstructions='Process only the event kind and collectionId. Read hunem_collection_queue(kind,id), claim with hunem_claim_collection(kind,id); generate only action=generate, skip busy/already-drawn. Meal sketches only sourced localDish meals completed; soda sketches correspond to actual purchases, not a claim of already finishing the bottle. Inspect current reliable dish/official product photographs and pass them as imagegen visual references. One unique loose graphite and light watercolor square transparent PNG of food or exact brand/flavour bottle/can, no character needed. Preserve identifying appearance; do not invent food ingredients or product labels. If visual reference cannot be confirmed leave pending. Verify actual square dimensions and alpha; visually review then submit original PNG through hunem_receive_collection(kind,id,lease,file,review). Existing sketches are reused on repeat consumption/purchase; no journal/world changes, no new schedules.';
 export async function collectionQueue(kind:string,id?:string){valid(kind,id);const rows=(await collectionRows(kind)).filter((r:any)=>r.sketchEligible&&!r.image);return {kind,pending:rows.length,items:rows.filter((r:any)=>!id||r.id===id).sort((a:any,b:any)=>a.firstSeenAt-b.firstSeenAt).slice(0,8),instructions:collectionInstructions};}
+export async function collectionQueueContent(kind:string,id?:string){
+ const queue=await collectionQueue(kind,id);if(!id||kind!=='meal')return collectionReferenceResult(queue);
+ const row=queue.items[0]||(await collectionRows(kind)).find((r:any)=>r.id===id);if(!row)return collectionReferenceResult(queue);
+ const key='reference-photos/meal-v1/'+id+'.json',cached=await bucket().get(key);let reference:any;
+ if(cached)try{const c:any=await cached.json();if(Date.now()-c.at<86400000&&Array.isArray(c.photos)&&c.photos.length<=2){const photos=c.photos.map((p:any)=>({...p,bytes:Buffer.from(p.data,'base64')}));if(photos.every((p:any)=>p.bytes.length<=768*1024&&referenceMime(p.bytes)===p.mimeType))reference={photos,errors:[]};}}catch{}
+ if(!reference){reference=await collectionReference(row);if(reference.photos.length)await bucket().put(key,JSON.stringify({at:Date.now(),photos:reference.photos.map(({bytes,...p}:any)=>({...p,data:Buffer.from(bytes).toString('base64')}))}),{httpMetadata:{contentType:'application/json'}});}
+ return collectionReferenceResult({...queue,referenceCollectionId:id,referenceOnly:queue.items.length===0},reference);
+}
 export async function claimCollection(kind:string,id:string){
  valid(kind,id);const row=(await collectionRows(kind)).find((r:any)=>r.id===id);if(!row||!row.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');if(row.image)return {action:'already-drawn',kind,id};
  const key='collection-claim:'+kind+':'+id,now=Date.now(),lease=crypto.randomUUID();
