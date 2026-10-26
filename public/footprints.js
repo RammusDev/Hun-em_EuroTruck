@@ -9,6 +9,7 @@
  let listController,clusterArea=null;
  let map,googleMode=false,markers=new Map(),timer,lastRefresh=0,page=0,selected=null,listRequest=0,mapRequest=0,mapController,opener;
  let mapFlight=null,mapQueued=false,appliedMapKey=null;
+ let expanded=null;
  const fmt=new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  const el=(tag,text)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
  async function get(params,signal){const r=await fetch('/api/footprints?'+new URLSearchParams(params),{signal,cache:'no-store'});if(!r.ok)throw Error('足跡暫時無法載入，請稍後重試。');return r.json();}
@@ -38,16 +39,26 @@
  list.addEventListener('touchend',event=>{if(!touch)return;const dx=event.changedTouches[0].clientX-touch.x,dy=event.changedTouches[0].clientY-touch.y;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.5)turn(dx<0?1:-1);touch=null;},{passive:true});
  mobile.addEventListener('change',()=>{page=0;if(dialog.open)drawList();});
  function remove(m){if(googleMode)m.setMap(null);else map.removeLayer(m);}
+ function clearExpansion(){if(!expanded)return;const old=expanded;expanded=null;for(const m of [...old.pins,...old.lines])remove(m);if(googleMode)old.marker.setMap(map);else old.marker.addTo(map);}
+ function fanPosition(p,index,count,zoom){const scale=256*2**zoom,lat=Math.max(-85,Math.min(85,p[1]))*Math.PI/180,angle=Math.PI+index*2*Math.PI/count,radius=Math.max(56,count*9),x=(p[0]+180)/360*scale+Math.cos(angle)*radius,y=(1-Math.log(Math.tan(lat)+1/Math.cos(lat))/Math.PI)/2*scale+Math.sin(angle)*radius;return [((x/scale*360)%360+360)%360-180,Math.atan(Math.sinh(Math.PI*(1-2*y/scale)))*180/Math.PI];}
+ function expandGroup(row,marker){
+  clearExpansion();if(!row.members?.length)return false;
+  const state={marker,pins:[],lines:[]};expanded=state;remove(marker);
+  row.members.forEach((member,i)=>{const p=fanPosition(row.p,i,row.members.length,map.getZoom());
+   const line=googleMode?new google.maps.Polyline({map,path:[{lat:member.p[1],lng:member.p[0]},{lat:p[1],lng:p[0]}],strokeColor:'#9b8158',strokeOpacity:.8,strokeWeight:1.5,clickable:false}):L.polyline([[member.p[1],member.p[0]],[p[1],p[0]]],{pane:'footprints',color:'#9b8158',opacity:.8,weight:1.5,interactive:false}).addTo(map);
+   state.lines.push(line);state.pins.push(make({...member,p,count:1}));
+  });return true;
+ }
  const pinImages=new Map();
  function pinSvg(image=''){return '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50"><defs><clipPath id="photo"><circle cx="20" cy="19" r="16.5"/></clipPath></defs><path d="M20 48C17 42 2 31 2 19A18 18 0 0 1 38 19C38 31 23 42 20 48Z" fill="#fffaf0" stroke="#8a7552" stroke-width="1.25" stroke-linejoin="round"/>'+ (image?'<image href="'+image+'" x="3.5" y="2.5" width="33" height="33" preserveAspectRatio="xMidYMid meet" clip-path="url(#photo)"/>':'<path d="m20 11 2.3 5.7L28 19l-5.7 2.3L20 27l-2.3-5.7L12 19l5.7-2.3Z" fill="#ad9666"/>')+'</svg>';}
 
  function pinUrl(svg){return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);}
  function photoPin(url){if(!pinImages.has(url)){const promise=fetch(url).then(r=>{if(!r.ok)throw Error('Thumbnail unavailable');return r.blob();}).then(blob=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(pinUrl(pinSvg(reader.result)));reader.onerror=reject;reader.readAsDataURL(blob);}));pinImages.set(url,promise);promise.catch(()=>pinImages.delete(url));if(pinImages.size>150)pinImages.delete(pinImages.keys().next().value);}return pinImages.get(url);}
  function make(row){
-  const cluster=row.count>1,title=cluster?`${row.count} 個足跡，點擊展開`:row.name,click=()=>{if(cluster){const zoom=map.getZoom(),max=googleMode?(map.get?.('maxZoom')??22):(map.getMaxZoom?.()??18),b=row.bounds,overlap=b&&Math.abs(b[2]-b[0])<1e-7&&Math.abs(b[3]-b[1])<1e-7;if(overlap||zoom>=18||zoom>=max){open(null,null,b);return;}if(b&&map.fitBounds){if(googleMode)map.fitBounds({west:b[0],south:b[1],east:b[2],north:b[3]},64);else map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{padding:[64,64],maxZoom:18});}else{const nextZoom=Math.min(max,Math.floor(zoom)+2);if(googleMode){map.setCenter({lat:row.p[1],lng:row.p[0]});map.setZoom(nextZoom);}else map.setView([row.p[1],row.p[0]],nextZoom);}}else open(row.id);};
-  if(googleMode){const icon=cluster?{path:google.maps.SymbolPath.CIRCLE,scale:19,fillColor:'#e5d4aa',fillOpacity:1,strokeColor:'#9b8158',strokeWeight:1}:{url:pinUrl(pinSvg()),scaledSize:new google.maps.Size(44,55),anchor:new google.maps.Point(22,53.9)};const m=new google.maps.Marker({map,position:{lat:row.p[1],lng:row.p[0]},title,icon,zIndex:0,label:cluster?{text:String(row.count),color:'#4d442e'}:undefined});if(!cluster&&row.image)photoPin(row.image.thumbnail).then(url=>{if(m.getMap())m.setIcon({url,scaledSize:new google.maps.Size(44,55),anchor:new google.maps.Point(22,53.9)});}).catch(()=>{});m.addListener('click',click);return m;}
+  let pointMarker;const cluster=row.count>1,title=cluster?`${row.count} 個足跡，點擊展開`:row.name,click=()=>{if(cluster){const zoom=map.getZoom(),max=googleMode?(map.get?.('maxZoom')??22):(map.getMaxZoom?.()??18),b=row.bounds,overlap=b&&Math.abs(b[2]-b[0])<1e-7&&Math.abs(b[3]-b[1])<1e-7;if(overlap||zoom>=18||zoom>=max){if(!expandGroup(row,pointMarker))open(null,null,b);return;}if(b&&map.fitBounds){if(googleMode)map.fitBounds({west:b[0],south:b[1],east:b[2],north:b[3]},64);else map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{padding:[64,64],maxZoom:18});}else{const nextZoom=Math.min(max,Math.floor(zoom)+2);if(googleMode){map.setCenter({lat:row.p[1],lng:row.p[0]});map.setZoom(nextZoom);}else map.setView([row.p[1],row.p[0]],nextZoom);}}else open(row.id);};
+  if(googleMode){const icon=cluster?{path:google.maps.SymbolPath.CIRCLE,scale:19,fillColor:'#e5d4aa',fillOpacity:1,strokeColor:'#9b8158',strokeWeight:1}:{url:pinUrl(pinSvg()),scaledSize:new google.maps.Size(44,55),anchor:new google.maps.Point(22,53.9)};const m=new google.maps.Marker({map,position:{lat:row.p[1],lng:row.p[0]},title,icon,zIndex:0,label:cluster?{text:String(row.count),color:'#4d442e'}:undefined});if(!cluster&&row.image)photoPin(row.image.thumbnail).then(url=>{if(m.getMap())m.setIcon({url,scaledSize:new google.maps.Size(44,55),anchor:new google.maps.Point(22,53.9)});}).catch(()=>{});pointMarker=m;m.addListener('click',click);return m;}
   const root=el('div');if(cluster){root.className='footprint-cluster';root.textContent=String(row.count);}else{root.className='footprint-single-pin';const img=el('img');img.src=pinUrl(pinSvg());img.alt='';img.width=44;img.height=55;root.append(img);if(row.image)photoPin(row.image.thumbnail).then(url=>{img.src=url;}).catch(()=>{});}
-  const size=cluster?38:44,m=L.marker([row.p[1],row.p[0]],{pane:'footprints',title,icon:L.divIcon({className:'footprint-marker',html:root,iconSize:[size,cluster?size:55],iconAnchor:[size/2,cluster?size/2:53.9]})}).addTo(map).bindTooltip(el('span',title));m.on('click',click);return m;
+  const size=cluster?38:44,m=L.marker([row.p[1],row.p[0]],{pane:'footprints',title,icon:L.divIcon({className:'footprint-marker',html:root,iconSize:[size,cluster?size:55],iconAnchor:[size/2,cluster?size/2:53.9]})}).addTo(map).bindTooltip(el('span',title));pointMarker=m;m.on('click',click);return m;
  }
  function mapView(){
   if(!map||!mapVisible)return null;const b=map.getBounds();if(!b)return null;
@@ -59,7 +70,7 @@
   const view=mapView();if(!view)return;if(mapFlight){if(mapFlight.key!==view.key)mapQueued=true;return;}if(view.key===appliedMapKey)return;
   const request=++mapRequest,controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),15000);mapController=controller;mapFlight={key:view.key,request};mapQueued=false;
   try{const data=await get(view.params,controller.signal);if(request!==mapRequest||mapView()?.key!==view.key)return;
-   if(!mapVisible)return;total.textContent=`${data.total} 個景點`;const keep=new Set();for(const row of data.points){const key=row.id+':'+(row.image?.sha256||'pending')+':'+row.count;keep.add(key);if(!markers.has(key))markers.set(key,make(row));}
+   if(!mapVisible)return;clearExpansion();total.textContent=`${data.total} 個景點`;const keep=new Set();for(const row of data.points){const key=row.id+':'+(row.image?.sha256||'pending')+':'+row.count;keep.add(key);if(!markers.has(key))markers.set(key,make(row));}
    for(const [key,m] of markers)if(!keep.has(key)){remove(m);markers.delete(key);}
    appliedMapKey=view.key;
   }catch(e){if(request===mapRequest){total.textContent=e.name==='AbortError'?'景點載入逾時，移動地圖可重試':'暫時無法載入';}}
@@ -67,7 +78,7 @@
  }
  // Movement queues the newest viewport; it never aborts a useful in-flight read.
  const schedule=()=>{clearTimeout(timer);if(mapVisible)timer=setTimeout(drawMap,300);};
- const invalidate=schedule;
- if(mapToggle)mapToggle.onclick=()=>{mapVisible=!mapVisible;try{localStorage.setItem(visibilityKey,String(mapVisible));}catch{}updateToggle();clearTimeout(timer);appliedMapKey=null;if(mapVisible)schedule();else{mapRequest++;mapController?.abort();mapFlight=null;mapQueued=false;for(const marker of markers.values())remove(marker);markers.clear();}};
+ const invalidate=()=>{clearExpansion();schedule();};
+ if(mapToggle)mapToggle.onclick=()=>{mapVisible=!mapVisible;try{localStorage.setItem(visibilityKey,String(mapVisible));}catch{}updateToggle();clearTimeout(timer);appliedMapKey=null;if(mapVisible)schedule();else{clearExpansion();mapRequest++;mapController?.abort();mapFlight=null;mapQueued=false;for(const marker of markers.values())remove(marker);markers.clear();}};
  window.HunemFootprints={init(m,g){if(map)return;map=m;googleMode=g;if(g){map.addListener('bounds_changed',invalidate);map.addListener('idle',schedule);}else{if(!map.getPane('footprints')){map.createPane('footprints');map.getPane('footprints').style.zIndex=590;}map.on('movestart zoomstart move zoom',invalidate);map.on('moveend zoomend',schedule);}schedule();},refresh(){if(Date.now()-lastRefresh<60000)return;lastRefresh=Date.now();appliedMapKey=null;schedule();if(dialog.open){bookCache.clear();drawList();}}};
 })();

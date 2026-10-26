@@ -32,5 +32,5 @@ export function mapFootprints(rows,{west,south,east,north,zoom=8}){
   for(const r of visible){const p=pixel(r.p),k=Math.floor(p[0]*scale/cell)+','+Math.floor(p[1]*scale/cell);if(!bins.has(k))bins.set(k,[]);bins.get(k).push(r);}
   groups=[...bins.values()];cell*=2;
  }while(groups.length>100);
- return groups.map(g=>{if(g.length===1)return {...g[0],visits:undefined,count:1};const xs=g.map(r=>r.p[0]),ys=g.map(r=>r.p[1]);return {id:'cluster:'+createHash('sha256').update(g.map(r=>r.id).sort().join('\n')).digest('hex').slice(0,32),count:g.length,p:[xs.reduce((a,b)=>a+b,0)/g.length,ys.reduce((a,b)=>a+b,0)/g.length],bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)],name:`${g.length} 個旅行足跡`};});
+ return groups.map(g=>{if(g.length===1)return {...g[0],visits:undefined,count:1};const xs=g.map(r=>r.p[0]),ys=g.map(r=>r.p[1]);return {id:'cluster:'+createHash('sha256').update(g.map(r=>r.id).sort().join('\n')).digest('hex').slice(0,32),count:g.length,p:[xs.reduce((a,b)=>a+b,0)/g.length,ys.reduce((a,b)=>a+b,0)/g.length],bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)],name:`${g.length} 個旅行足跡`,...(g.length<=12?{members:g.map(r=>({id:r.id,name:r.name,p:[...r.p],image:r.image||null,count:1})).sort((a,b)=>a.id.localeCompare(b.id))}:{})};});
 }
