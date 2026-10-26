@@ -1,3 +1,4 @@
+import {referenceFallbacks} from './collection-reference-fallback.mjs';
 // Public visual reference candidates, delivered as native MCP image blocks.
 // Never fetch arbitrary item/source URLs or require a model-side downloader.
 const maxBytes=768*1024;
@@ -39,6 +40,7 @@ export async function collectionReference(row,{fetcher=fetch}={}){
    }catch(e){errors.push(e.message);}
   }
  }catch(e){errors.push(e.message);}
+ if(!photos.length){for(const p of referenceFallbacks[row.name.normalize('NFKC').toLocaleLowerCase().trim()]||[]){const {data,...metadata}=p;photos.push({...metadata,bytes:Buffer.from(data,'base64')});}}
  if(!photos.length&&!errors.length)errors.push('REFERENCE_NO_MATCH');
  return {photos,errors};
 }
