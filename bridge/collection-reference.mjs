@@ -26,7 +26,7 @@ export async function collectionReference(row,{fetcher=fetch}={}){
  const u=new URL('https://commons.wikimedia.org/w/api.php');
  u.search=new URLSearchParams({action:'query',format:'json',formatversion:'2',generator:'search',gsrnamespace:'6',gsrlimit:'5',gsrsearch:row.name+' filetype:bitmap',prop:'imageinfo',iiprop:'url|mime|size|extmetadata',iiurlwidth:'640'});
  try{
-  const response=await fetcher(u,{redirect:'error',signal:AbortSignal.timeout(6000),headers:{'User-Agent':'HunEmTravel/1.4 (public dish visual reference)'}});
+  const response=await fetcher(u,{redirect:'manual',signal:AbortSignal.timeout(6000),headers:{'User-Agent':'HunEmTravel/1.4 (public dish visual reference)'}});
   const data=JSON.parse((await bodyBytes(response)).toString('utf8'));if(data.error)fail('REFERENCE_SEARCH_FAILED');
   const candidates=(data.query?.pages||[]).filter(p=>words.every(w=>p.title?.normalize('NFKC').toLocaleLowerCase().includes(w))&&!/\b(?:logo|icon|map|drawing|illustration|recipe)\b/i.test(p.title)&&(!/vegan|vegetarian/i.test(p.title)||/vegan|vegetarian/i.test(row.name))).sort((a,b)=>(a.index||0)-(b.index||0));
   for(const page of candidates.slice(0,3)){
@@ -34,7 +34,7 @@ export async function collectionReference(row,{fetcher=fetch}={}){
    const info=page.imageinfo?.[0];if(!info||!['image/jpeg','image/png'].includes(info.mime)||info.width<120||info.height<120)continue;
    try{
     const sourcePage=referenceUrl(info.descriptionurl,'commons.wikimedia.org'),sourceImage=referenceUrl(info.thumburl||info.url,['upload.wikimedia.org','thumb.wikimedia.org']);
-    const r=await fetcher(sourceImage,{redirect:'error',signal:AbortSignal.timeout(4000)}),bytes=await bodyBytes(r),mimeType=referenceMime(bytes);
+    const r=await fetcher(sourceImage,{redirect:'manual',signal:AbortSignal.timeout(4000)}),bytes=await bodyBytes(r),mimeType=referenceMime(bytes);
     photos.push({bytes,mimeType,title:page.title,sourcePage,sourceImage,credit:plain(info.extmetadata?.Artist?.value),license:plain(info.extmetadata?.LicenseShortName?.value)});
    }catch(e){errors.push(e.message);}
   }
