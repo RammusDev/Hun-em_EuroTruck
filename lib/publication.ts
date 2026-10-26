@@ -2,6 +2,7 @@ import {transaction,getObject,engine,Conflict,binaryHash} from './runtime';
 import {env} from 'cloudflare:workers';
 import {writingPacket,mergeCandidate,candidateView,errorFields} from '../bridge/writing-packet.mjs';
 import {observeOperation,publicationMetrics} from '../bridge/publication-metrics.mjs';
+import {taiwanPlaceErrors} from '../bridge/taiwan-place-names.mjs';
 const minute=60000,root='/hunem/data';
 export async function publication(p:any,op:string,x:any,context:{now?:number,keyPrefix?:string,noFiles?:boolean}={}){
  const at=context.now??Date.now(),started=performance.now();
@@ -46,6 +47,8 @@ async function publicationCore(p:any,op:string,x:any,context:{now?:number,keyPre
  if(op==='validate'||op==='write'){
   const saved=p.cloudCandidates?.[job.id];const draft=mergeCandidate(saved?.draft||job.draft,x.patch||x.draft||{}),review={...saved?.review,...x.review};
   const errors=engine.validateDailyWriting(job.input,draft,review);
+  // Completed writing remains reusable; apply the new policy only to new submissions.
+  if(!p.cloudWriting?.[job.id])errors.push(...taiwanPlaceErrors(draft));
   p.cloudCandidates??={};p.cloudCandidates[job.id]={draft,review};
   if(errors.length){metrics.validationFailures++;return {valid:false,errors,fields:errorFields(errors)};}
   if(op==='validate')return {valid:true};

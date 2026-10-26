@@ -18,7 +18,9 @@ test('native MCP pilot validates, attaches and publishes independently of the fo
  d.learning.de.words=['absent：未出現','truck：卡車','walk：散步'];
  const invalid=await h.hunem_submit_writing({session:c.session,action:'validate',draft:d,review});assert.equal(invalid.valid,false);
  assert.equal((await h.hunem_submit_writing({session:c.session,action:'validate',patch:{learning:{de:{words:['truck：卡車','walk：散步','afternoon：下午']}}}})).valid,true);
- assert.equal((await h.hunem_submit_writing({session:c.session,action:'write'})).written,true);
+ const badPlace=await h.hunem_submit_writing({session:c.session,action:'write',patch:{title:'那不勒斯與克羅地亞'}});
+ assert.equal(badPlace.valid,false);assert.deepEqual(badPlace.fields,['title']);assert.match(badPlace.errors.join(' '),/拿坡里/);
+ assert.equal((await h.hunem_submit_writing({session:c.session,action:'write',patch:{title:d.title}})).written,true);
  assert.equal((await h.hunem_publication_progress({session:c.session,includeContent:true})).writing.zh,d.zh);
  objects.set('illustrations/hunem-reference-v2.png',readFileSync('D:/Work/Hum-em_EuroTruck/public/illustrations/hunem-reference-v2.png'));
  const ref=await h.hunem_reference_art({session:c.session});assert.match(ref.content[0].text,/1:1/);assert.match(c.input.imageRequests[0].instruction,/1254×1254/);
