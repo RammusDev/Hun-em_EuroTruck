@@ -28,3 +28,11 @@ body.footprints-open{overflow:hidden;}
 /* A single continuous outline; Google and Leaflet share the same pin image. */
 .footprint-single-pin{width:44px;height:55px;background:transparent;border:0;}
 .footprint-marker .footprint-single-pin img{display:block;width:44px;height:55px;max-width:none;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;object-fit:contain;filter:drop-shadow(0 1px 1px #59442826);}
+
+/* Keep the visibility switch outside the map and its controls. */
+.map-wrap>.map-frame-title{display:flex;align-items:center;justify-content:space-between;gap:12px;height:auto;min-height:44px;box-sizing:border-box;}
+#toggle-map-footprints{flex:none;min-height:36px;padding:6px 12px;border:1px solid #b8a47d;border-radius:5px;background:#f6efdf;color:#655338;font:inherit;font-size:12px;letter-spacing:.5px;line-height:1.4;cursor:pointer;}
+#toggle-map-footprints[aria-pressed="true"]{background:#e9e3d2;border-color:#9b8963;color:#435343;}
+#toggle-map-footprints:hover{background:#e3d8bf;}
+#toggle-map-footprints:focus-visible{outline:2px solid #536b57;outline-offset:3px;}
+@media(min-width:1101px){.map-wrap>.map-frame-title{height:48px;}.travel-grid>.job-card{margin-top:48px;}}
