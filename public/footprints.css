@@ -36,3 +36,6 @@ body.footprints-open{overflow:hidden;}
 #toggle-map-footprints:hover{background:#e3d8bf;}
 #toggle-map-footprints:focus-visible{outline:2px solid #536b57;outline-offset:3px;}
 @media(min-width:1101px){.map-wrap>.map-frame-title{height:48px;}.travel-grid>.job-card{margin-top:48px;}}
+
+/* Position artwork is decorative; scenery underneath remains clickable. */
+.cat-marker,.cat-marker img{pointer-events:none!important;}
