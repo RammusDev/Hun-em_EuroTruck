@@ -1,7 +1,7 @@
 import {referenceFallbacks} from './collection-reference-fallback.mjs';
 // Public visual reference candidates, delivered as native MCP image blocks.
 // Never fetch arbitrary item/source URLs or require a model-side downloader.
-const maxBytes=768*1024;
+const maxBytes=1024*1024;
 const fail=m=>{throw Error(m);};
 export function referenceUrl(value,host){
  const u=new URL(value),hosts=Array.isArray(host)?host:[host];if(u.protocol!=='https:'||!hosts.includes(u.hostname)||u.username||u.password||u.port)fail('REFERENCE_HOST_REJECTED');return u.href;
@@ -40,12 +40,12 @@ export async function collectionReference(row,{fetcher=fetch}={}){
    }catch(e){errors.push(e.message);}
   }
  }catch(e){errors.push(e.message);}
- if(!photos.length){for(const p of referenceFallbacks[row.name.normalize('NFKC').toLocaleLowerCase().trim()]||[]){const {data,...metadata}=p;photos.push({...metadata,bytes:Buffer.from(data,'base64')});}}
+ if(!photos.length){for(const p of referenceFallbacks[row.name.normalize('NFKC').toLocaleLowerCase().trim()]||[]){try{const url=referenceUrl(p.sourceImage,'www.chioscoibandito.com');const response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(4000)}),bytes=await bodyBytes(response);photos.push({...p,bytes,mimeType:referenceMime(bytes)});}catch(e){errors.push(e.message);}}}
  if(!photos.length&&!errors.length)errors.push('REFERENCE_NO_MATCH');
  return {photos,errors};
 }
 export function collectionReferenceResult(queue,reference={photos:[],errors:[]}){
  const {photos=[],errors=[]}=reference;
- const instruction='Reference photos below are external appearance candidates, not proof of the exact serving or vendor visited. Inspect them visually. Native MCP image blocks are already viewable: if no local image file can be downloaded, pass the visible reference to built-in imagegen with num_last_images_to_include instead of treating a missing local path as a missing reference. If no image is returned, try an official vendor image or Wikimedia/recipe image through image search and open the actual image; try at least two independent sources before reporting unavailable. For soda require the exact brand and flavour. Never infer extra ingredients from unrelated photographs.';
- return {content:[{type:'text',text:JSON.stringify({...queue,referencePhotos:photos.map(({bytes,mimeType,...p})=>({...p,mimeType})),referenceErrors:errors,referenceInstruction:instruction})},...photos.map(p=>({type:'image',mimeType:p.mimeType,data:Buffer.from(p.bytes).toString('base64')}))],isError:false};
+ const instruction='Meal photographs were prepared when the committed plan selected the dish. This drawing read uses cached bytes only: do not search or download another meal reference at drawing time. Inspect the native MCP image blocks visually and pass the visible reference to built-in imagegen with num_last_images_to_include; a local path is not required. If no cached photo is available, leave pending and report the preparation error so background preparation can retry. Saved and verified artwork deletes cached photo bytes but retains source, credit, license and hash records. Photos are appearance candidates, not proof of serving/vendor/ingredients. For soda require the exact brand and flavour official package photo. Never infer extra ingredients.';
+ return {content:[{type:'text',text:JSON.stringify({...queue,referencePreparedAt:reference.preparedAt||null,referencePhotos:photos.map(({bytes,mimeType,...p})=>({...p,mimeType})),referenceErrors:errors,referenceInstruction:instruction})},...photos.map(p=>({type:'image',mimeType:p.mimeType,data:Buffer.from(p.bytes).toString('base64')}))],isError:false};
 }

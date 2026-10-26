@@ -4,7 +4,8 @@ import {collectionInventory,collectionKinds} from '../bridge/collections.mjs';
 import {pngReceipt} from '../bridge/mcp-file.mjs';
 import {makeReferencePreview} from '../bridge/reference-preview.mjs';
 import {validateCollectionImage} from '../bridge/collection-image.mjs';
-import {collectionReference,collectionReferenceResult,referenceMime} from '../bridge/collection-reference.mjs';
+import {collectionReferenceResult} from '../bridge/collection-reference.mjs';
+import {mealReferenceCache,selectedMealReferences} from '../bridge/meal-reference-cache.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const valid=(kind:string,id?:string)=>{if(!collectionKinds.includes(kind)||id!==undefined&&!/^[a-f0-9]{32}$/.test(id))throw Error('INVALID_COLLECTION');};
 export async function collectionRows(kind:string,p?:any){
@@ -27,10 +28,21 @@ export async function collectionQueue(kind:string,id?:string){valid(kind,id);con
 export async function collectionQueueContent(kind:string,id?:string){
  const queue=await collectionQueue(kind,id);if(!id||kind!=='meal')return collectionReferenceResult(queue);
  const row=queue.items[0]||(await collectionRows(kind)).find((r:any)=>r.id===id);if(!row)return collectionReferenceResult(queue);
- const key='reference-photos/meal-v1/'+id+'.json',cached=await bucket().get(key);let reference:any;
- if(cached)try{const c:any=await cached.json();if(Date.now()-c.at<86400000&&Array.isArray(c.photos)&&c.photos.length<=2){const photos=c.photos.map((p:any)=>({...p,bytes:Buffer.from(p.data,'base64')}));if(photos.every((p:any)=>p.bytes.length<=768*1024&&referenceMime(p.bytes)===p.mimeType))reference={photos,errors:[]};}}catch{}
- if(!reference){reference=await collectionReference(row);if(reference.photos.length)await bucket().put(key,JSON.stringify({at:Date.now(),photos:reference.photos.map(({bytes,...p}:any)=>({...p,data:Buffer.from(bytes).toString('base64')}))}),{httpMetadata:{contentType:'application/json'}});}
+ const reference:any=row.image?{photos:[],errors:[],preparedAt:null}:await mealReferenceCache({bucket:bucket()}).read(id);
  return collectionReferenceResult({...queue,referenceCollectionId:id,referenceOnly:queue.items.length===0},reference);
+}
+export async function prepareMealReferences(p:any){
+ const lock='meal-reference-preparation',lease=crypto.randomUUID(),at=Date.now();
+ await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(lock,'{}',at).run();
+ const acquired=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,at+60000,lock,at).first();if(!acquired)return;
+ try{
+ const cache=mealReferenceCache({bucket:bucket()}),drawn=new Map((await collectionRows('meal',p)).filter((r:any)=>r.image).map((r:any)=>[r.id,r.image]));
+ await cache.sweep(drawn);
+ // Existing undrawn completed dishes also recover through background work, never a queue read.
+ const pending=(await collectionRows('meal',p)).filter((r:any)=>!r.image),selected=selectedMealReferences(p);
+ const rows=[...new Map([...pending,...selected].filter((r:any)=>!drawn.has(r.id)).map((r:any)=>[r.id,r])).values()];
+ for(const row of rows.slice(0,2)){await cache.prepare(row);const latest=(await collectionRows('meal')).find((r:any)=>r.id===row.id);if(latest?.image)await cache.finish(row.id,latest.image);}
+ }finally{await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(lock,lease).run();}
 }
 export async function claimCollection(kind:string,id:string){
  valid(kind,id);const row=(await collectionRows(kind)).find((r:any)=>r.id===id);if(!row||!row.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');if(row.image)return {action:'already-drawn',kind,id};
@@ -41,7 +53,7 @@ export async function claimCollection(kind:string,id:string){
 }
 export async function saveCollection(kind:string,id:string,lease:string,bytes:Buffer,review:any){
  valid(kind,id);const row=(await collectionRows(kind)).find((r:any)=>r.id===id);if(!row||!row.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');
- const receipt=pngReceipt(bytes);if(row.image){if(row.image.sha256!==receipt.sha256)throw Error('COLLECTION_ALREADY_DRAWN');return {kind,id,...row.image,reused:true,worldModified:false};}
+ const receipt=pngReceipt(bytes);if(row.image){if(row.image.sha256!==receipt.sha256)throw Error('COLLECTION_ALREADY_DRAWN');if(kind==='meal')await mealReferenceCache({bucket:bucket()}).finish(id,row.image);return {kind,id,...row.image,reused:true,worldModified:false};}
  const claimKey='collection-claim:'+kind+':'+id,claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind(claimKey).first<any>();
  if(typeof lease!=='string'||!claim||claim.lease!==lease||claim.lease_until<Date.now())throw Error('COLLECTION_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.subjectRecognizable!==true||!review.originalGeneratedPath)throw Error('COLLECTION_REVIEW_REQUIRED');
@@ -52,6 +64,7 @@ export async function saveCollection(kind:string,id:string,lease:string,bytes:Bu
  const image={src:'/'+base+'.png',thumbnail:'/'+base+'.jpg',sha256:receipt.sha256,drawnAt:Date.now(),width:receipt.width,height:receipt.height,review},key='collection:'+kind+':'+id;
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) SELECT ?,?,0,? FROM hunem_runtime WHERE id=? AND lease=? AND lease_until>=?').bind(key,JSON.stringify(image),Date.now(),claimKey,lease,Date.now()).run();
  const record=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(key).first<any>();if(!record)throw Error('COLLECTION_CLAIM_REQUIRED');const saved=JSON.parse(record.value);if(saved.sha256!==receipt.sha256)throw Error('COLLECTION_ALREADY_DRAWN');
+ if(kind==='meal')await mealReferenceCache({bucket:bucket()}).finish(id,saved);
  await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(claimKey,lease).run();
  return {kind,id,...saved,originalBytes:bytes.length,thumbnailBytes:preview.bytes.length,worldModified:false};
 }

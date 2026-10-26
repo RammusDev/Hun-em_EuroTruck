@@ -4,7 +4,7 @@ import {callbackUrl,signingKey,signedHeaders} from './footprint-events.mjs';
 export const collectionEventNames={meal:'hunem.meal_completed',soda:'hunem.soda_purchased'};
 const hash=s=>createHash('sha256').update(s).digest('hex');
 export const collectionEventDefinitions=Object.entries(collectionEventNames).map(([kind,name])=>({name,description:kind==='meal'?'A sourced local specialty meal was actually finished; its collection sketch is missing. Process only this collectionId.':'A soda product was actually purchased; its collection sketch is missing. Purchase time is the collection and drawing trigger, not evidence that drinking is already finished.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},collectionId:{type:'string'},kind:{type:'string',enum:[kind]},name:{type:'string'},recordedAt:{type:'number'},url:{type:'string'}},required:['worldId','collectionId','kind','name','recordedAt','url'],additionalProperties:false}}));
-export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.now}){
+export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.now,ready=async(_row)=>true}){
  const name=collectionEventNames[kind];if(!name)throw Error('INVALID_COLLECTION_KIND');
  const subPrefix='collection-event-sub:'+kind+':',deliveryPrefix='collection-event:'+kind+':';
  const get=async id=>{const row=await db.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(id).first();return row?JSON.parse(row.value):null;};
@@ -41,6 +41,7 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
   for(const sub of subs)for(const row of rows){
    // Subscription start is a durable watermark: history appears in the UI but never floods AI.
    const occurrence=row.occurrences.filter(e=>e.time>=sub.createdAt).sort((a,b)=>a.time-b.time)[0];if(!occurrence)continue;
+   if(!await ready(row))continue;
    if(attempted>=2)return {subscriptions:subs.length,delivered};
    const eventId=kind+'_'+hash(sub.key+'\n'+row.id).slice(0,40),key=deliveryPrefix+eventId,old=await get(key);
    if(old&&(old.status==='sent'||old.status==='stopped'||old.nextAt>now()))continue;

@@ -25,7 +25,7 @@ test('no results or provider failure leave the queue usable and never invent ima
 });
 
 test('oversized image responses are refused instead of returned as visual evidence',async()=>{
- const r=await collectionReference(row,{fetcher:async url=>String(url).includes('/w/api.php')?Response.json({query:{pages:[page()]}}):new Response(jpeg,{headers:{'content-length':String(768*1024+1)}})});
+ const r=await collectionReference(row,{fetcher:async url=>String(url).includes('/w/api.php')?Response.json({query:{pages:[page()]}}):new Response(jpeg,{headers:{'content-length':String(1024*1024+1)}})});
  assert.equal(r.photos.length,0);assert.ok(r.errors.includes('REFERENCE_TOO_LARGE'));
 });
 
@@ -34,4 +34,4 @@ test('Cloudflare-compatible manual redirects never follow a redirect target',asy
  assert.equal(calls,1);assert.equal(r.photos.length,0);assert.ok(r.errors.includes('REFERENCE_HTTP_302'));
 });
 
-test('verified bundled photo survives cloud image host rejection and retains provenance',async()=>{const r=await collectionReference({kind:'meal',name:'lampredotto'},{fetcher:async()=>new Response(null,{status:403})});assert.equal(r.photos.length,1);assert.equal(r.photos[0].delivery,'bundled-verified-photo');assert.equal(r.photos[0].license,'CC BY-SA 4.0');assert.ok(r.photos[0].bytes.length>100000);assert.ok(r.errors.includes('REFERENCE_HTTP_403'));});
+test('official source fallback downloads at preparation time and retains provenance',async()=>{const r=await collectionReference({kind:'meal',name:'lampredotto'},{fetcher:async url=>String(url).includes('chioscoibandito')?new Response(jpeg):new Response(null,{status:403})});assert.equal(r.photos.length,1);assert.equal(r.photos[0].delivery,'official-source-fallback');assert.equal(r.photos[0].credit,'Chiosco I’Bandito');assert.ok(r.errors.includes('REFERENCE_HTTP_403'));});
