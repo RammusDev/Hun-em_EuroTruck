@@ -8,6 +8,7 @@
  const mobile=matchMedia('(max-width:700px)'),perPage=()=>mobile.matches?1:2,bookCache=new Map();
  let listController,clusterArea=null;
  let map,googleMode=false,markers=new Map(),timer,lastRefresh=0,page=0,selected=null,listRequest=0,mapRequest=0,mapController,opener;
+ let mapFlight=null,mapQueued=false,appliedMapKey=null;
  const fmt=new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  const el=(tag,text)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
  async function get(params,signal){const r=await fetch('/api/footprints?'+new URLSearchParams(params),{signal,cache:'no-store'});if(!r.ok)throw Error('足跡暫時無法載入，請稍後重試。');return r.json();}
@@ -43,22 +44,30 @@
  function pinUrl(svg){return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);}
  function photoPin(url){if(!pinImages.has(url)){const promise=fetch(url).then(r=>{if(!r.ok)throw Error('Thumbnail unavailable');return r.blob();}).then(blob=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(pinUrl(pinSvg(reader.result)));reader.onerror=reject;reader.readAsDataURL(blob);}));pinImages.set(url,promise);promise.catch(()=>pinImages.delete(url));if(pinImages.size>150)pinImages.delete(pinImages.keys().next().value);}return pinImages.get(url);}
  function make(row){
-  const cluster=row.count>1,title=cluster?`${row.count} 個足跡，點擊展開`:row.name,click=()=>{if(cluster){const zoom=map.getZoom(),max=googleMode?(map.get?.('maxZoom')??22):(map.getMaxZoom?.()??18);if(zoom>=18||zoom>=max){open(null,null,row.bounds);return;}const nextZoom=Math.min(max,Math.floor(zoom)+2);if(googleMode){map.setCenter({lat:row.p[1],lng:row.p[0]});map.setZoom(nextZoom);}else map.setView([row.p[1],row.p[0]],nextZoom);}else open(row.id);};
+  const cluster=row.count>1,title=cluster?`${row.count} 個足跡，點擊展開`:row.name,click=()=>{if(cluster){const zoom=map.getZoom(),max=googleMode?(map.get?.('maxZoom')??22):(map.getMaxZoom?.()??18),b=row.bounds,overlap=b&&Math.abs(b[2]-b[0])<1e-7&&Math.abs(b[3]-b[1])<1e-7;if(overlap||zoom>=18||zoom>=max){open(null,null,b);return;}if(b&&map.fitBounds){if(googleMode)map.fitBounds({west:b[0],south:b[1],east:b[2],north:b[3]},64);else map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{padding:[64,64],maxZoom:18});}else{const nextZoom=Math.min(max,Math.floor(zoom)+2);if(googleMode){map.setCenter({lat:row.p[1],lng:row.p[0]});map.setZoom(nextZoom);}else map.setView([row.p[1],row.p[0]],nextZoom);}}else open(row.id);};
   if(googleMode){const icon=cluster?{path:google.maps.SymbolPath.CIRCLE,scale:19,fillColor:'#e5d4aa',fillOpacity:1,strokeColor:'#9b8158',strokeWeight:1}:{url:pinUrl(pinSvg()),scaledSize:new google.maps.Size(44,55),anchor:new google.maps.Point(22,53.9)};const m=new google.maps.Marker({map,position:{lat:row.p[1],lng:row.p[0]},title,icon,zIndex:0,label:cluster?{text:String(row.count),color:'#4d442e'}:undefined});if(!cluster&&row.image)photoPin(row.image.thumbnail).then(url=>{if(m.getMap())m.setIcon({url,scaledSize:new google.maps.Size(44,55),anchor:new google.maps.Point(22,53.9)});}).catch(()=>{});m.addListener('click',click);return m;}
   const root=el('div');if(cluster){root.className='footprint-cluster';root.textContent=String(row.count);}else{root.className='footprint-single-pin';const img=el('img');img.src=pinUrl(pinSvg());img.alt='';img.width=44;img.height=55;root.append(img);if(row.image)photoPin(row.image.thumbnail).then(url=>{img.src=url;}).catch(()=>{});}
   const size=cluster?38:44,m=L.marker([row.p[1],row.p[0]],{pane:'footprints',title,icon:L.divIcon({className:'footprint-marker',html:root,iconSize:[size,cluster?size:55],iconAnchor:[size/2,cluster?size/2:53.9]})}).addTo(map).bindTooltip(el('span',title));m.on('click',click);return m;
  }
- async function drawMap(){
-  if(!map||!mapVisible)return;const b=map.getBounds();if(!b)return;
+ function mapView(){
+  if(!map||!mapVisible)return null;const b=map.getBounds();if(!b)return null;
   const bounds=googleMode?{west:b.getSouthWest().lng(),south:b.getSouthWest().lat(),east:b.getNorthEast().lng(),north:b.getNorthEast().lat()}: {west:Math.max(-180,b.getWest()),south:Math.max(-90,b.getSouth()),east:Math.min(180,b.getEast()),north:Math.min(90,b.getNorth())};
-  const request=++mapRequest;mapController?.abort();mapController=new AbortController();
-  try{const data=await get({mode:'map',...Object.fromEntries(Object.entries(bounds).map(([k,v])=>[k,String(v)])),zoom:String(map.getZoom())},mapController.signal);if(request!==mapRequest)return;
+  const params={mode:'map',...Object.fromEntries(Object.entries(bounds).map(([k,v])=>[k,String(v)])),zoom:String(Math.floor(map.getZoom()))};
+  const key=[...Object.values(bounds).map(v=>v.toFixed(6)),params.zoom].join(':');return {params,key};
+ }
+ async function drawMap(){
+  const view=mapView();if(!view)return;if(mapFlight){if(mapFlight.key!==view.key)mapQueued=true;return;}if(view.key===appliedMapKey)return;
+  const request=++mapRequest,controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),15000);mapController=controller;mapFlight={key:view.key,request};mapQueued=false;
+  try{const data=await get(view.params,controller.signal);if(request!==mapRequest||mapView()?.key!==view.key)return;
    if(!mapVisible)return;total.textContent=`${data.total} 個景點`;const keep=new Set();for(const row of data.points){const key=row.id+':'+(row.image?.sha256||'pending')+':'+row.count;keep.add(key);if(!markers.has(key))markers.set(key,make(row));}
    for(const [key,m] of markers)if(!keep.has(key)){remove(m);markers.delete(key);}
-  }catch(e){if(e.name!=='AbortError')total.textContent='暫時無法載入';}
+   appliedMapKey=view.key;
+  }catch(e){if(request===mapRequest){total.textContent=e.name==='AbortError'?'景點載入逾時，移動地圖可重試':'暫時無法載入';}}
+  finally{clearTimeout(deadline);if(mapFlight?.request===request){mapFlight=null;mapController=null;const latest=mapView();if(latest&&(mapQueued||latest.key!==view.key)){mapQueued=false;schedule();}}}
  }
- const invalidate=()=>{mapRequest++;mapController?.abort();clearTimeout(timer);};
- const schedule=()=>{invalidate();if(mapVisible)timer=setTimeout(drawMap,250);};
- if(mapToggle)mapToggle.onclick=()=>{mapVisible=!mapVisible;try{localStorage.setItem(visibilityKey,String(mapVisible));}catch{}updateToggle();invalidate();if(mapVisible)schedule();else{for(const marker of markers.values())remove(marker);markers.clear();}};
- window.HunemFootprints={init(m,g){if(map)return;map=m;googleMode=g;if(g){map.addListener('bounds_changed',invalidate);map.addListener('idle',schedule);}else{if(!map.getPane('footprints')){map.createPane('footprints');map.getPane('footprints').style.zIndex=590;}map.on('movestart zoomstart',invalidate);map.on('moveend zoomend',schedule);}schedule();},refresh(){if(Date.now()-lastRefresh<60000)return;lastRefresh=Date.now();schedule();if(dialog.open){bookCache.clear();drawList();}}};
+ // Movement queues the newest viewport; it never aborts a useful in-flight read.
+ const schedule=()=>{clearTimeout(timer);if(mapVisible)timer=setTimeout(drawMap,300);};
+ const invalidate=schedule;
+ if(mapToggle)mapToggle.onclick=()=>{mapVisible=!mapVisible;try{localStorage.setItem(visibilityKey,String(mapVisible));}catch{}updateToggle();clearTimeout(timer);appliedMapKey=null;if(mapVisible)schedule();else{mapRequest++;mapController?.abort();mapFlight=null;mapQueued=false;for(const marker of markers.values())remove(marker);markers.clear();}};
+ window.HunemFootprints={init(m,g){if(map)return;map=m;googleMode=g;if(g){map.addListener('bounds_changed',invalidate);map.addListener('idle',schedule);}else{if(!map.getPane('footprints')){map.createPane('footprints');map.getPane('footprints').style.zIndex=590;}map.on('movestart zoomstart move zoom',invalidate);map.on('moveend zoomend',schedule);}schedule();},refresh(){if(Date.now()-lastRefresh<60000)return;lastRefresh=Date.now();appliedMapKey=null;schedule();if(dialog.open){bookCache.clear();drawList();}}};
 })();
