@@ -74,6 +74,10 @@ export async function POST(req:Request){try{
  if(route==='/api/object')return result(await putObject(u.searchParams.get('key')||'',await req.arrayBuffer()));
  if(route==='/api/publication'){
   const body:any=await req.json();
+  if(body.op==='collection-reference-prepare'){
+   const {repairMealReference}=await import('../../../lib/collections');
+   return result(await repairMealReference(body.id));
+  }
   if(body.op==='tour-recovery-read'||body.op==='tour-recovery-commit'){
    if(body.expectedWorldId!==engine.florenceRecovery.worldId)throw new Conflict('FLORENCE_RECOVERY_SCOPE');
    if(body.op==='tour-recovery-read')return result(engine.florenceRecoveryView(await committed()));

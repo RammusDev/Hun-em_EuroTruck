@@ -34,3 +34,9 @@ test('download failure stays pending, retries only in preparation, expires witho
  await cache.prepare({id,name:'food'});assert.equal((await cache.read(id)).errors[0],'REFERENCE_PREPARATION_FAILED');await cache.prepare({id,name:'food'});assert.equal(calls,1);
  time+=5*60000;await cache.prepare({id,name:'food'});assert.equal(calls,2);time+=8*86400000;await cache.sweep();assert.ok(!bucket.objects.has(key));assert.equal(calls,2);
 });
+test('cached failure diagnostics retain bounded codes without upstream secrets or queue writes',async()=>{
+ const bucket=fake();await bucket.put(key,JSON.stringify({at:1000,expiresAt:999999,status:'failed',photos:[],errors:['REFERENCE_HTTP_403','The operation was aborted due to timeout','secret=https://private.test/?token=hidden','REFERENCE_HTTP_403']}));
+ const before=Buffer.from(bucket.objects.get(key));const r=await mealReferenceCache({bucket,now:()=>2000}).read(id);
+ assert.deepEqual(r.errors,['REFERENCE_PREPARATION_FAILED','REFERENCE_HTTP_403','REFERENCE_TIMEOUT','REFERENCE_FETCH_FAILED']);
+ assert.deepEqual(bucket.objects.get(key),before);assert.equal(r.preparedAt,1000);
+});

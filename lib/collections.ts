@@ -31,7 +31,7 @@ export async function collectionQueueContent(kind:string,id?:string){
  const reference:any=row.image?{photos:[],errors:[],preparedAt:null}:await mealReferenceCache({bucket:bucket()}).read(id);
  return collectionReferenceResult({...queue,referenceCollectionId:id,referenceOnly:queue.items.length===0},reference);
 }
-export async function prepareMealReferences(p:any){
+export async function prepareMealReferences(p:any,onlyId?:string){
  const lock='meal-reference-preparation',lease=crypto.randomUUID(),at=Date.now();
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(lock,'{}',at).run();
  const acquired=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,at+60000,lock,at).first();if(!acquired)return;
@@ -41,8 +41,17 @@ export async function prepareMealReferences(p:any){
  // Existing undrawn completed dishes also recover through background work, never a queue read.
  const pending=(await collectionRows('meal',p)).filter((r:any)=>!r.image),selected=selectedMealReferences(p);
  const rows=[...new Map([...pending,...selected].filter((r:any)=>!drawn.has(r.id)).map((r:any)=>[r.id,r])).values()];
- for(const row of rows.slice(0,2)){await cache.prepare(row);const latest=(await collectionRows('meal')).find((r:any)=>r.id===row.id);if(latest?.image)await cache.finish(row.id,latest.image);}
+ for(const row of rows.filter((r:any)=>!onlyId||r.id===onlyId).slice(0,2)){await cache.prepare(row);const latest=(await collectionRows('meal')).find((r:any)=>r.id===row.id);if(latest?.image)await cache.finish(row.id,latest.image);}
  }finally{await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(lock,lease).run();}
+}
+// Explicit owner repair prepares only an existing completed dish. It never advances the world.
+export async function repairMealReference(id:string){
+ valid('meal',id);const p=await committed(),row=(await collectionRows('meal',p)).find((r:any)=>r.id===id);
+ if(!row?.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');
+ if(row.image)return {id,alreadyDrawn:true,worldModified:false};
+ await prepareMealReferences(p,id);
+ const {photos,errors,preparedAt}=await mealReferenceCache({bucket:bucket()}).read(id);
+ return {id,preparedAt,errors,photos:photos.map(({bytes,...photo}:any)=>photo),worldModified:false};
 }
 export async function claimCollection(kind:string,id:string){
  valid(kind,id);const row=(await collectionRows(kind)).find((r:any)=>r.id===id);if(!row||!row.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');if(row.image)return {action:'already-drawn',kind,id};
