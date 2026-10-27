@@ -5,7 +5,7 @@
  let mapVisible=true;try{mapVisible=localStorage.getItem(visibilityKey)!=='false';}catch{}
  function updateToggle(){if(!mapToggle)return;mapToggle.textContent=mapVisible?'隱藏景點':'顯示景點';mapToggle.setAttribute('aria-pressed',String(mapVisible));}
  updateToggle();
- const mobile=matchMedia('(max-width:700px)'),perPage=()=>mobile.matches?1:2,bookCache=new Map();
+ const perPage=()=>4,bookCache=new Map();
  let listController,clusterArea=null;
  let map,googleMode=false,markers=new Map(),timer,lastRefresh=0,page=0,selected=null,listRequest=0,mapRequest=0,mapController,opener;
  let mapFlight=null,mapQueued=false,appliedMapKey=null;
@@ -16,7 +16,7 @@
   const request=++listRequest;listController?.abort();listController=new AbortController();status.textContent='正在翻閱足跡…';prev.disabled=next.disabled=true;
   try{const apiPage=Math.floor(page*perPage()/12),key=selected||String(apiPage);let data=bookCache.get(key);if(!data){data=await get(selected?{id:selected}:{page:String(apiPage),...(clusterArea?{area:clusterArea.join(',')}:{})},listController.signal);if(request===listRequest)bookCache.set(key,data);}if(request!==listRequest||!dialog.open)return;
    const cards=[];total.textContent=`${data.overallTotal??data.total} 個景點`;
-   const offset=selected?0:(page*perPage())%12;for(const row of data.items.slice(offset,offset+(selected?1:perPage()))){const card=el('article');card.className='footprint-card album-page';const title=el('h3',row.name);card.append(title);
+   const offset=selected?0:(page*perPage())%12;for(const row of data.items.slice(offset,offset+(selected?1:perPage()))){const card=el('article');card.className='footprint-card album-page';const title=el('h3',row.displayName||row.name),location=el('p',row.locationLabel||'城鎮待確認-地區待確認-國家待確認');location.className='footprint-locality';card.append(title,location);
     if(row.image){const link=el('a');link.href=row.image.src;link.target='_blank';link.rel='noopener';link.setAttribute('aria-label','開啟'+row.name+'速寫原圖');const img=el('img');img.src=row.image.src;img.alt=row.name+'專屬旅行速寫';img.loading='lazy';img.decoding='async';img.width=row.image.width;img.height=row.image.height;link.append(img);card.append(link,el('p','點圖查看原圖'));}
     else{const pending=el('div','已留下足跡，專屬速寫待繪製');pending.className='footprint-pending';card.append(pending);}
     card.append(el('p',`${row.visits.length} 次參觀 · 柏林時間`));
@@ -36,7 +36,6 @@
  dialog.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();turn(event.key==='ArrowLeft'?-1:1);}});
  let touch=null;list.addEventListener('touchstart',event=>{if(event.target.closest('a,button,details'))return;touch={x:event.changedTouches[0].clientX,y:event.changedTouches[0].clientY};},{passive:true});
  list.addEventListener('touchend',event=>{if(!touch)return;const dx=event.changedTouches[0].clientX-touch.x,dy=event.changedTouches[0].clientY-touch.y;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.5)turn(dx<0?1:-1);touch=null;},{passive:true});
- mobile.addEventListener('change',()=>{page=0;if(dialog.open)drawList();});
  function remove(m){if(googleMode)m.setMap(null);else map.removeLayer(m);}
  const pinImages=new Map();
  function pinSvg(image=''){return '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50"><defs><clipPath id="photo"><circle cx="20" cy="19" r="16.5"/></clipPath></defs><path d="M20 48C17 42 2 31 2 19A18 18 0 0 1 38 19C38 31 23 42 20 48Z" fill="#fffaf0" stroke="#8a7552" stroke-width="1.25" stroke-linejoin="round"/>'+ (image?'<image href="'+image+'" x="3.5" y="2.5" width="33" height="33" preserveAspectRatio="xMidYMid meet" clip-path="url(#photo)"/>':'<path d="m20 11 2.3 5.7L28 19l-5.7 2.3L20 27l-2.3-5.7L12 19l5.7-2.3Z" fill="#ad9666"/>')+'</svg>';}
