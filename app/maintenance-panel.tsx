@@ -1,0 +1,41 @@
+'use client';
+import {useEffect,useState} from 'react';
+const names:any={cities:'配送城市',travel:'旅遊與道路重試',character:'角色生活與寫作'};
+const time=(at:number)=>new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',dateStyle:'short',timeStyle:'short'}).format(at);
+export default function MaintenancePanel(){
+ const [data,setData]=useState<any>(null),[kind,setKind]=useState('cities'),[text,setText]=useState(''),[reason,setReason]=useState(''),[preview,setPreview]=useState<any>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[search,setSearch]=useState(''),[page,setPage]=useState(0),[restoreHash,setRestoreHash]=useState('');
+ async function call(body?:any,query=''):Promise<any>{const r=await fetch('/api/maintenance'+query,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});const d:any=await r.json();if(!r.ok)throw Error(d.error||'讀取失敗');return d;}
+ async function load(selected=kind){const d=await call();setData(d);setText(d.resources.find((r:any)=>r.kind===selected).text);setPreview(null);setRestoreHash('');setReason('');}
+ useEffect(()=>{load().catch(e=>setError(e.message));},[]);
+ const current=data?.resources.find((r:any)=>r.kind===kind);
+ function select(next:string){if(current&&text!==current.text&&!confirm('捨棄尚未保存的修改？'))return;setKind(next);setText(data.resources.find((r:any)=>r.kind===next).text);setPreview(null);setReason('');setRestoreHash('');setSearch('');setPage(0);setError('');setNotice('');}
+ function edit(value:string){setText(value);setPreview(null);setRestoreHash('');setNotice('');}
+ function jsonEdit(fn:(v:any)=>void){const v=JSON.parse(text);fn(v);edit(JSON.stringify(v,null,2)+'\n');}
+ async function action(op:string){setBusy(true);setError('');setNotice('');try{if(op==='preview')setPreview(await call({op,kind,text,expectedHash:current.hash}));else{const r=await call({op:restoreHash?'restore':'save',kind,text,hash:restoreHash,expectedHash:current.hash,reason});await load();setNotice(r.updated?'設定已保存；後續新決策會使用此版本。':'沒有需要保存的變更。');}}catch(e:any){setError(e.message);}finally{setBusy(false);}}
+ async function restore(hash:string){setBusy(true);setError('');setNotice('');try{const d=await call(undefined,'?op=version&kind='+kind+'&hash='+hash);setText(d.text);setRestoreHash(hash);setPreview(null);setReason('回復先前設定版本');}catch(e:any){setError(e.message);}finally{setBusy(false);}}
+ async function download(){setBusy(true);setError('');try{const d=await call(undefined,'?op=debug'),url=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='hunem-cloud-debug-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setNotice('除錯資料已準備下載。');}catch(e:any){setError(e.message);}finally{setBusy(false);}}
+ let parsed:any=null;try{if(kind!=='character')parsed=JSON.parse(text);}catch{}
+ const cities=parsed?.cities?.filter((c:any)=>(c.name+' '+c.localName+' '+c.countryName+' '+c.id).toLowerCase().includes(search.toLowerCase()))||[];
+ const history=data?.history.filter((r:any)=>r.kind===kind)||[];
+ const versions=[...new Set<string>(history.flatMap((r:any)=>[r.hash,r.beforeHash]))].filter(h=>h!==current?.hash);
+ return <section className="access-paper maintenance-panel" aria-labelledby="maintenance-title">
+  <div className="access-section-title"><div><p className="access-eyebrow">THE WORKSHOP</p><h2 id="maintenance-title">雲端維護</h2></div><button className="access-button secondary small" onClick={download} disabled={busy||!data}>下載除錯資料</button></div>
+  <p className="access-help">設定保存後，於下一次背景事件載入，用於後續決策；已保存的行程與日記素材沿用原安排。角色修改用於未來新封存的日記。</p>
+  {error?<p className="access-alert is-error" role="alert">{error} <a href="/probe/login">重新登入</a></p>:null}{notice?<p className="access-alert is-success" role="status">{notice}</p>:null}
+  {!data?<p role="status">正在讀取正式設定…</p>:<>
+   <div className="access-filters" aria-label="設定類別">{Object.keys(names).map(k=><button key={k} disabled={busy} aria-pressed={kind===k} onClick={()=>select(k)}>{names[k]}</button>)}</div>
+   <p className="access-help maintenance-version">目前版本 {current.hash.slice(0,12)} · {current.revision?time(current.revision.at):'既有正式設定'}{current.revision?<><br/>{current.applied?.hash===current.hash?'伺服器已載入此版本 · '+time(current.applied.at):'已保存，等待後續背景事件載入'}</>:null}</p>
+   <fieldset disabled={busy} className="maintenance-fields">
+   {kind==='cities'?<><p className="access-help">調整未來接單候選。城市名稱、位置與既有行程保持原設定。</p><label htmlFor="maintenance-city-search">搜尋城市或國家</label><input id="maintenance-city-search" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}} type="search"/>
+    <div className="maintenance-cities">{cities.slice(page*15,(page+1)*15).map((c:any)=><div className="maintenance-city" key={c.id}><label><input type="checkbox" checked={c.enabled} disabled={c.id==='munich'} onChange={e=>jsonEdit(v=>{v.cities.find((x:any)=>x.id===c.id).enabled=e.target.checked;})}/><span>{c.name}<small>{c.localName} · {c.countryName}</small></span></label><label className="maintenance-weight">抽選權重<input aria-label={c.name+'抽選權重'} type="number" min="0.01" max="100" step="0.01" value={c.weight} onChange={e=>jsonEdit(v=>{v.cities.find((x:any)=>x.id===c.id).weight=e.target.value===''?0:Number(e.target.value);})}/></label></div>)}</div>
+    <div className="maintenance-actions"><button className="access-button secondary small" disabled={page===0} onClick={()=>setPage(p=>p-1)}>上一頁</button><span>{cities.length?`${page+1} / ${Math.ceil(cities.length/15)}`:'沒有符合的城市'}</span><button className="access-button secondary small" disabled={(page+1)*15>=cities.length} onClick={()=>setPage(p=>p+1)}>下一頁</button></div></>:null}
+   {kind==='travel'&&parsed?<div className="maintenance-policy">{Object.entries(data.travelFields).map(([path,limits]:any)=>{const keys=path.split('.'),value=keys.reduce((v:any,k:string)=>v[k],parsed);return <label key={path}>{limits[2]}<input type="number" min={limits[0]} max={limits[1]} step="1" value={value} onChange={e=>jsonEdit(v=>{const k=keys.slice(),last=k.pop()!;k.reduce((o:any,key:string)=>o[key],v)[last]=e.target.value===''?0:Number(e.target.value);})}/><small>{limits[0]}–{limits[1]}</small></label>;})}</div>:null}
+   {kind==='character'?<><p className="access-help">可編輯生活、喜好、寫作聲音與四語收尾；形象、住家與身世需保留原文。</p><label htmlFor="maintenance-character">角色設定 Markdown</label><textarea id="maintenance-character" className="maintenance-character" value={text} onChange={e=>edit(e.target.value)} spellCheck={false}/><details><summary>查看修改前原文</summary><pre className="maintenance-original">{current.text}</pre></details></>:null}
+   <label htmlFor="maintenance-reason">修改原因</label><input id="maintenance-reason" maxLength={300} value={reason} onChange={e=>setReason(e.target.value)} placeholder="例如：暫停抽選這個城市"/>
+   <div className="maintenance-actions"><button className="access-button secondary" onClick={()=>action('preview')}>檢查變更</button><button className="access-button primary" disabled={!preview?.changes?.length||reason.trim().length<2} onClick={()=>action('save')}>{restoreHash?'保存回復版本':'保存設定'}</button><button className="access-button secondary" onClick={()=>{setText(current.text);setPreview(null);setReason('');setRestoreHash('');setNotice('已還原編輯內容。');}}>捨棄修改</button></div>
+   </fieldset>
+   {preview?<div role="status" className="maintenance-preview"><h3>變更檢查 · {preview.changes.length} 項</h3>{preview.changes.length?<ul>{preview.changes.map((c:any,i:number)=><li key={i}>{c.field}：{String(c.before)} → {String(c.after)}</li>)}</ul>:<p>與目前設定相同。</p>}</div>:null}
+   <details className="maintenance-history"><summary>設定歷史與版本回復（{history.length} 筆近期紀錄）</summary><p className="access-help">選擇舊版本後，先檢查變更，再保存回復。每次回復也會留下新紀錄。</p>{versions.length?<div className="maintenance-versions">{versions.map(hash=><button key={hash} className="access-button secondary small" disabled={busy} onClick={()=>restore(hash)}>載入 {hash.slice(0,12)}</button>)}</div>:<p>首次修改後即可回復原設定。</p>}<ul>{history.map((r:any)=><li key={r.id}>{time(r.at)} · {r.action==='restore'?'回復':'修改'} · {r.reason} · {r.hash.slice(0,12)}</li>)}</ul></details>
+  </>}
+ </section>;
+}

@@ -2,3 +2,4 @@ export const tick:any,snapshot:any,retryPendingRoute:any,dateParts:any,cities:an
 export const tourMigration:any,eligibleTourMigration:any,migrateTour:any;
 export const buildEventPlan:any,settlePlan:any,projectPlan:any,publicTimeline:any,eventRandom:any;
 export const recoverFlorenceTour:any,florenceRecoveryView:any,florenceRecovery:any;
+export const movementPolicy:any;

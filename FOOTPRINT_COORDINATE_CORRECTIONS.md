@@ -1,5 +1,7 @@
 # 手動景點定位修正
 
+2026-10-27 使用者確認目前維持「發現定位錯誤時手動修正」；暫不實作跨來源／城鎮／座標自動一致性校驗。以下個別校正與歷史資料保護方式維持。
+
 2026-10-26 使用者明確要求修正本次定位。San Nicola（Trentinara）的已保存 Wikipedia 座標誤指向 Pertosa 的 Santa Maria delle Grazie。正式讀回確認 topic `wikipedia:it:10527533`、footprint `3f02182d35594e7cc989c7b483ed4266`，原位置為經度15.448582／緯度40.543694。
 
 依 Wikimedia Commons（San Nicola 類別的 Wikidata 定位）40°23′58.8″N、15°06′32.1″E，校正為經度15.108917／緯度40.399667；Trentinara 市政府確認教堂在該鎮 Piazza San Nicola。Pertosa 那筆保持原位。

@@ -7,6 +7,7 @@ import {footprintRead,footprintQueue,saveFootprint} from '../../../lib/footprint
 import {collectionRead} from '../../../lib/collections';
 import {worldActor} from '../../../lib/world-auth';
 import {readMonitor,setMonitorEmail,runMonitor} from '../../../lib/monitor-store.mjs';
+import {diagnosticBundle} from '../../../lib/maintenance.mjs';
 // @ts-ignore
 import {authorizeWorld,publicReaderView} from '../../../lib/world-policy.mjs';
 export const dynamic='force-dynamic';
@@ -27,7 +28,7 @@ export async function GET(req:Request){try{
  if(route==='/api/config')return result(await transaction(async p=>JSON.parse(p.files['/hunem/assets/language-learning.json']),false));
  if(route==='/api/publication')return result(await transaction(p=>publication(p,'status',{})));
  if(route==='/api/research')return result(await transaction(async()=>({researched:true})));
- if(route==='/api/debug')return result(await transaction(async p=>({version:1,world:p.world,routes:p.routes,cloud:true}),false));
+ if(route==='/api/debug'){const p=await committed();return result(diagnosticBundle(p,await readMonitor(p,stateView(p),env),null,Object.values(env).filter(v=>typeof v==='string')));}
  return result({error:'Not found'},404);
  }catch(e:any){return result({error:e.message},e.status||500);}}
 export async function POST(req:Request){try{
@@ -99,7 +100,11 @@ export async function POST(req:Request){try{
   return result(await transaction(p=>publication(p,body.op,body)));
  }
  if(route==='/api/retry-route'){if(req.headers.get('origin')!==u.origin)return result({error:'Invalid origin'},403);return result(await transaction(async p=>{await engine.retryPendingRoute(p.world,engine.getRoute);return stateView(p);}));}
- if(route==='/api/debug')return result(await transaction(async p=>({version:1,world:p.world,routes:p.routes,cloud:true}),false));
+ if(route==='/api/debug'){
+  if(Number(req.headers.get('content-length')||0)>1000000)return result({error:'除錯資料過大'},413);
+  const raw=await req.text();if(Buffer.byteLength(raw)>1000000)return result({error:'除錯資料過大'},413);
+  const client=raw?JSON.parse(raw):null,p=await committed();return result(diagnosticBundle(p,await readMonitor(p,stateView(p),env),client,Object.values(env).filter(v=>typeof v==='string')));
+ }
  if(route==='/api/control')return result({error:'雲端正式世界不提供快轉或變速'},403);
  return result({error:'Not found'},404);
  }catch(e:any){return result({error:e.message},e.status||400);}}

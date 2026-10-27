@@ -4,6 +4,7 @@ import * as core from './core.mjs';
 import {advanceCloud} from '../bridge/advance.mjs';
 import bundledFiles from '../bridge/static-files.json';
 import {browserState} from '../bridge/browser-state.mjs';
+import {syncRuntimeSettings} from '../bridge/runtime-settings.mjs';
 import {runEventClock,notifyEventTimer} from '../bridge/event-runtime.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const root='/hunem/data',json=(x:any)=>JSON.stringify(x);
@@ -18,7 +19,7 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
   if(!row)throw new Conflict('世界正在同步，請稍後重試');
   try{
    const body=await bucket().get(JSON.parse(row.value).key);if(!body)throw Error('世界快照遺失，禁止建立新世界');
-   const p=await body.json<any>();core.hydrate(p.files||{});
+   const p=await body.json<any>();core.hydrate(p.files||{});const appliedSettings=syncRuntimeSettings(core,p);
    process.env.GOOGLE_MAPS_API_KEY=String((env as any).GOOGLE_MAPS_API_KEY||'');process.env.GOOGLE_MAPS_BROWSER_KEY=String((env as any).GOOGLE_MAPS_BROWSER_KEY||'');
    if(advance){
     if(p.eventPlan?.events?.some((e:any)=>e.dueAt<now-10*60000)){
@@ -38,6 +39,7 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
    }
    const beforeResult=p.eventArchitecture?hash(p.world):null;
    const result=await fn(p);if(!commit||options.skipCommit?.(result))return result;
+   if(p.maintenance){p.maintenance.applied??={};for(const [kind,digest] of Object.entries(appliedSettings))if(p.maintenance.applied[kind]?.hash!==digest)p.maintenance.applied[kind]={hash:digest,at:now};}
    if(beforeResult&&hash(p.world)!==beforeResult&&advance)p.eventPlan=await core.buildEventPlan(p);
    Object.assign(p.files,core.changes());
    for(const key of Object.keys(p.files))if(key.endsWith('.tmp'))delete p.files[key];
