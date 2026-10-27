@@ -94,7 +94,7 @@ function truckStatusNote(s){
 }
 function renderHoliday(){
  const card=document.querySelector('.job-card');
- card.querySelector('.small-label').textContent=state.job?'目前配送':'目前活動';
+ card.querySelector('.small-label').textContent=state.outing?'目前旅遊':state.travel?'目前行程':state.job?'目前配送':'目前活動';
  for(const id of ['distance','reward'])$(id).parentElement.hidden=!state.job;
  card.classList.toggle('activity-only',!state.job);
  renderFinance();
