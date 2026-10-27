@@ -74,6 +74,10 @@ export async function POST(req:Request){try{
  if(route==='/api/object')return result(await putObject(u.searchParams.get('key')||'',await req.arrayBuffer()));
  if(route==='/api/publication'){
   const body:any=await req.json();
+  if(body.op==='collection-runtime-check'){
+   const {diagnoseEventClock}=await import('../../../lib/event-diagnostic');
+   return result(await diagnoseEventClock());
+  }
   if(body.op==='collection-reference-prepare'){
    const {repairCollectionReference}=await import('../../../lib/collections');
    return result(await repairCollectionReference(body.kind||'meal',body.id));
