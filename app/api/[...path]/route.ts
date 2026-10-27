@@ -78,6 +78,10 @@ export async function POST(req:Request){try{
    const {diagnoseEventClock}=await import('../../../lib/event-diagnostic');
    return result(await diagnoseEventClock());
   }
+  if(body.op==='collection-runtime-reconcile'){
+   await notifyEventTimer((env as any).EVENT_TIMER_CONTROL_URL,(env as any).BACKGROUND_TICK_SECRET);
+   return result({requested:true,worldModified:false});
+  }
   if(body.op==='collection-reference-prepare'){
    const {repairCollectionReference}=await import('../../../lib/collections');
    return result(await repairCollectionReference(body.kind||'meal',body.id));
