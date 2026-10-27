@@ -37,10 +37,10 @@ export async function collectionReference(row,{fetcher=fetch}={}){
     const sourcePage=referenceUrl(info.descriptionurl,'commons.wikimedia.org'),sourceImage=referenceUrl(info.thumburl||info.url,['upload.wikimedia.org','thumb.wikimedia.org']);
     const r=await fetcher(sourceImage,{redirect:'manual',signal:AbortSignal.timeout(4000)}),bytes=await bodyBytes(r),mimeType=referenceMime(bytes);
     photos.push({bytes,mimeType,title:page.title,sourcePage,sourceImage,credit:plain(info.extmetadata?.Artist?.value),license:plain(info.extmetadata?.LicenseShortName?.value)});
-   }catch(e){errors.push(e.message);}
+   }catch(e){errors.push(e.message);if(/^REFERENCE_HTTP_\d{3}$/.test(e.message))errors.push(e.message.replace('REFERENCE_HTTP_','REFERENCE_IMAGE_HTTP_'));}
   }
- }catch(e){errors.push(e.message);}
- if(!photos.length){for(const p of referenceFallbacks[row.name.normalize('NFKC').toLocaleLowerCase().trim()]||[]){try{const url=referenceUrl(p.sourceImage,'www.chioscoibandito.com');const response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(4000)}),bytes=await bodyBytes(response);photos.push({...p,bytes,mimeType:referenceMime(bytes)});}catch(e){errors.push(e.message);}}}
+ }catch(e){errors.push(e.message);if(/^REFERENCE_HTTP_\d{3}$/.test(e.message))errors.push(e.message.replace('REFERENCE_HTTP_','REFERENCE_SEARCH_HTTP_'));}
+ if(!photos.length){for(const p of referenceFallbacks[row.name.normalize('NFKC').toLocaleLowerCase().trim()]||[]){try{const hosts=['www.chioscoibandito.com','www.visitsicily.info'],url=referenceUrl(p.sourceImage,hosts);referenceUrl(p.sourcePage,hosts);const response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(4000)}),bytes=await bodyBytes(response);photos.push({...p,bytes,mimeType:referenceMime(bytes)});}catch(e){errors.push(e.message);}}}
  if(!photos.length&&!errors.length)errors.push('REFERENCE_NO_MATCH');
  return {photos,errors};
 }

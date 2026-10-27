@@ -40,3 +40,10 @@ test('cached failure diagnostics retain bounded codes without upstream secrets o
  assert.deepEqual(r.errors,['REFERENCE_PREPARATION_FAILED','REFERENCE_HTTP_403','REFERENCE_TIMEOUT','REFERENCE_FETCH_FAILED']);
  assert.deepEqual(bucket.objects.get(key),before);assert.equal(r.preparedAt,1000);
 });
+test('new lookup version retries old failed caches once while keeping successful photos and current backoff',async()=>{
+ const bucket=fake();let calls=0;const cache=mealReferenceCache({bucket,now:()=>2000,lookup:async()=>{calls++;return {photos:[],errors:['REFERENCE_HTTP_403']};}});
+ await bucket.put(key,JSON.stringify({at:1000,expiresAt:999999,retryAt:99999,status:'failed',photos:[],errors:['REFERENCE_HTTP_403']}));
+ await cache.prepare({id,name:'Arancini'});await cache.prepare({id,name:'Arancini'});assert.equal(calls,1);
+ await bucket.put(key,JSON.stringify({at:1000,expiresAt:999999,retryAt:99999,status:'ready',photos:[{...photo,data:jpeg.toString('base64'),sha256:digest(jpeg)}]}));
+ await cache.prepare({id,name:'Arancini'});assert.equal(calls,1);assert.equal((await cache.read(id)).photos.length,1);
+});

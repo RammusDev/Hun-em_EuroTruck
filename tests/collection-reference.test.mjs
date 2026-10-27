@@ -35,3 +35,7 @@ test('Cloudflare-compatible manual redirects never follow a redirect target',asy
 });
 
 test('official source fallback downloads at preparation time and retains provenance',async()=>{const r=await collectionReference({kind:'meal',name:'lampredotto'},{fetcher:async url=>String(url).includes('chioscoibandito')?new Response(jpeg):new Response(null,{status:403})});assert.equal(r.photos.length,1);assert.equal(r.photos[0].delivery,'official-source-fallback');assert.equal(r.photos[0].credit,'Chiosco I’Bandito');assert.ok(r.errors.includes('REFERENCE_HTTP_403'));});
+test('Arancini uses the verified official tourism photo when Commons search is denied',async()=>{
+ const calls=[];const r=await collectionReference({kind:'meal',name:'Arancini'},{fetcher:async(url,init)=>{calls.push(String(url));assert.equal(init.redirect,'manual');return String(url).includes('commons.wikimedia.org/w/api.php')?new Response(null,{status:403}):new Response(jpeg);}});
+ assert.equal(r.photos.length,1);assert.equal(calls.length,2);assert.equal(new URL(calls[1]).hostname,'www.visitsicily.info');assert.ok(r.errors.includes('REFERENCE_SEARCH_HTTP_403'));assert.equal(r.photos[0].delivery,'official-source-fallback');assert.equal(r.photos[0].checkedOn,'2026-10-27');
+});

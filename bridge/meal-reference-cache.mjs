@@ -4,6 +4,7 @@ import {collectionReference,referenceMime} from './collection-reference.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const prefix='reference-photos/meal-v2/';
 const ttl=7*86400000;
+const lookupVersion='meal-reference-v3-official-arancini';
 // Never expose arbitrary upstream exception text, URLs or response bodies.
 const safeErrors=errors=>[...new Set((Array.isArray(errors)?errors:[]).map(e=>/^REFERENCE_[A-Z0-9_]{1,80}$/.test(e)?e:/timeout|abort/i.test(String(e))?'REFERENCE_TIMEOUT':'REFERENCE_FETCH_FAILED'))].slice(0,8);
 // Only selected meals in the committed plan, never all research candidates.
@@ -25,9 +26,9 @@ export function mealReferenceCache({bucket,lookup=boundedLookup,now=Date.now}){
   try{const photos=c.photos.map(({data,...p})=>({...p,bytes:Buffer.from(data,'base64')}));if(!photos.every(p=>p.bytes.length<=1024*1024&&referenceMime(p.bytes)===p.mimeType&&hash(p.bytes)===p.sha256))throw Error();return {photos,errors:[],preparedAt:c.at};}catch{return {photos:[],errors:['REFERENCE_CACHE_INVALID']};}
  }
  async function prepare(row){
-  const old=await readJson(key(row.id));if(old?.expiresAt>now()&&(old.photos?.length||old.retryAt>now()))return;
+  const old=await readJson(key(row.id));if(old?.expiresAt>now()&&(old.photos?.length||old.lookupVersion===lookupVersion&&old.retryAt>now()))return;
   const r=await lookup(row),at=now(),photos=r.photos.map(({bytes,...p})=>({...p,sha256:hash(bytes),data:Buffer.from(bytes).toString('base64')}));
-  const record={id:row.id,name:row.name,at,expiresAt:at+ttl,retryAt:at+5*60000,status:photos.length?'ready':'failed',photos,errors:r.errors};
+  const record={id:row.id,name:row.name,at,expiresAt:at+ttl,retryAt:at+5*60000,status:photos.length?'ready':'failed',photos,errors:r.errors,lookupVersion};
   await bucket.put(key(row.id),JSON.stringify(record),{httpMetadata:{contentType:'application/json'}});
   await bucket.put(audit(row.id),JSON.stringify({...record,photos:photos.map(({data,...p})=>p)}),{httpMetadata:{contentType:'application/json'}});
  }
