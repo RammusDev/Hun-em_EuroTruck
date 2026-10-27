@@ -1,16 +1,18 @@
 import {createHash,randomUUID,timingSafeEqual} from 'node:crypto';
 import {collectionInventory} from './collections.mjs';
 import {callbackUrl,signingKey,signedHeaders} from './footprint-events.mjs';
+import {collectionCompletionService,completionGraceMs} from './collection-completion.mjs';
 export const collectionEventNames={meal:'hunem.meal_completed',soda:'hunem.soda_purchased'};
 const hash=s=>createHash('sha256').update(s).digest('hex');
 export const collectionEventDefinitions=Object.entries(collectionEventNames).map(([kind,name])=>({name,description:kind==='meal'?'A sourced local specialty meal was actually finished; its collection sketch is missing. Process only this collectionId.':'A soda product was actually purchased; its collection sketch is missing. Purchase time is the collection and drawing trigger, not evidence that drinking is already finished.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},collectionId:{type:'string'},kind:{type:'string',enum:[kind]},name:{type:'string'},recordedAt:{type:'number'},url:{type:'string'}},required:['worldId','collectionId','kind','name','recordedAt','url'],additionalProperties:false}}));
-export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.now,ready=async(_row)=>true}){
+export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.now,ready=async(_row)=>true,reference}){
  const name=collectionEventNames[kind];if(!name)throw Error('INVALID_COLLECTION_KIND');
  const subPrefix='collection-event-sub:'+kind+':',deliveryPrefix='collection-event:'+kind+':';
  const get=async id=>{const row=await db.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(id).first();return row?JSON.parse(row.value):null;};
  const put=async(id,value)=>db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,revision=revision+1,updated_at=excluded.updated_at').bind(id,JSON.stringify(value),now()).run();
  const all=async prefix=>(await db.prepare('SELECT id,value FROM hunem_runtime WHERE id LIKE ?').bind(prefix+'%').all()).results.map(r=>({key:r.id,...JSON.parse(r.value)}));
  const active=s=>s.enabled&&s.expiresAt>now();
+ const completion=collectionCompletionService({db,kind,now,reference:reference||(async row=>({ready:await ready(row),errors:[]}))});
  async function rpc(method,args,owner,worldId){
   if(!owner)throw Error('OWNER_REQUIRED');
   if(method==='events/list')return {events:collectionEventDefinitions.filter(d=>d.name===name)};
@@ -34,6 +36,7 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
   return {id,refreshBefore:new Date(expiresAt).toISOString(),cursor:null,truncated:false};
  }
  async function process(payload,onlyId){
+  await completion.reconcile(payload,onlyId);
   const subs=(await all(subPrefix)).filter(s=>active(s)&&s.worldId===payload.world.publicationWorldId);
   const images=new Set((await all('collection:'+kind+':')).map(r=>r.key.split(':')[2]));
   const rows=collectionInventory(payload,kind,Math.min(now(),payload.world.now)).filter(r=>r.sketchEligible&&!images.has(r.id)&&(!onlyId||r.id===onlyId));
@@ -53,7 +56,7 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
     const body=JSON.stringify({eventId:deliveryId,name,timestamp:new Date(at).toISOString(),data:{worldId:payload.world.publicationWorldId,collectionId:row.id,kind,name:row.name,recordedAt:at,url:'https://hun-em-europe.honeygrass8.chatgpt.site/journey'},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,deliveryId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,deliveryId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
-    await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now()});if(accepted)delivered++;
+    await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});if(accepted)delivered++;
    }finally{await db.prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(key,lease).run();}
   }
   return {subscriptions:subs.length,delivered};
@@ -67,6 +70,6 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
    try{const saved=JSON.parse(locked.value),requests=saved.replayRequests||[];if(requests.some(r=>r.id===requestId)||saved.status==='pending')continue;if(requests.filter(r=>r.at>now()-86400000).length>=3)throw Error('REPLAY_DAILY_LIMIT');await put(e.key,{...saved,status:'pending',attempts:0,nextAt:0,generation:(saved.generation||0)+1,replayRequests:[...requests,{id:requestId,at:now()}].slice(-10)});queued++;}finally{await db.prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(e.key,lease).run();}
   }return {kind,id,action:queued?'replayed':'unchanged',queued,...await process(payload,id)};
  }
- async function status(){const subs=await all(subPrefix),events=await all(deliveryPrefix);return {kind,name,activeSubscriptions:subs.filter(active).length,expiredSubscriptions:subs.filter(s=>s.enabled&&!active(s)).length,delivered:events.filter(e=>e.status==='sent').length,retrying:events.filter(e=>e.status==='pending').length,stopped:events.filter(e=>e.status==='stopped').length,latestDelivery:events.filter(e=>e.at).sort((a,b)=>b.at-a.at).slice(0,3).map(e=>({collectionId:e.collectionId,recordedAt:e.recordedAt,status:e.status,httpStatus:e.httpStatus,at:e.at,attempts:e.attempts}))};}
- return {rpc,process,status,replay};
+ async function status(payload){const subs=await all(subPrefix),events=await all(deliveryPrefix);return {kind,name,activeSubscriptions:subs.filter(active).length,expiredSubscriptions:subs.filter(s=>s.enabled&&!active(s)).length,delivered:events.filter(e=>e.status==='sent').length,retrying:events.filter(e=>e.status==='pending').length,stopped:events.filter(e=>e.status==='stopped').length,latestDelivery:events.filter(e=>e.at).sort((a,b)=>b.at-a.at).slice(0,3).map(e=>({collectionId:e.collectionId,recordedAt:e.recordedAt,status:e.status,httpStatus:e.httpStatus,at:e.at,attempts:e.attempts,automaticRetries:e.automaticRetries||0})),...(payload?{completion:await completion.state(payload)}:{})};}
+ return {rpc,process,status,replay,recordFailure:completion.failure};
 }

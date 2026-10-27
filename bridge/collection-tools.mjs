@@ -1,10 +1,12 @@
 import {fileSchema} from './mcp-file.mjs';
+import {collectionFailureCodes} from './collection-completion.mjs';
 const kind={type:'string',enum:['meal','soda']},id={type:'string',pattern:'^[a-f0-9]{32}$'};
 const tool=(name,description,properties,required,readOnly=false)=>({name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint:readOnly,destructiveHint:false,openWorldHint:!readOnly,idempotentHint:true}});
 export const collectionTools=[
  tool('hunem_collection_queue','Read sourced completed local meals or purchased soda products awaiting sketches. kind=meal|soda; optional id selects the event collectionId. No world advance. Never infer finishing a soda from purchase.',{kind,id},['kind'],true),
  tool('hunem_claim_collection','Claim one recorded specialty meal or purchased soda for 20 minutes. Generate only action=generate; busy/already-drawn skip. Repeats reuse the same sketch.',{kind,id},['kind','id']),
  {...tool('hunem_receive_collection','Save original square transparent imagegen PNG through native file with active lease, actual generation and subject visual review. Never overwrite existing images or change world/journals.',{kind,id,lease:{type:'string'},file:fileSchema,review:{type:'object',properties:{tool:{type:'string',enum:['image_gen.imagegen']},actuallyCalled:{type:'boolean'},subjectRecognizable:{type:'boolean'},originalGeneratedPath:{type:'string'}},required:['tool','actuallyCalled','subjectRecognizable','originalGeneratedPath'],additionalProperties:false}},['kind','id','lease','file','review']),_meta:{'openai/fileParams':['file']}},
- tool('hunem_collection_event_status','Read active meal/soda subscriptions and delivery receipts. No callback URLs, credentials, leases or world changes.',{},[],true),
+ tool('hunem_collection_event_status','Read subscriptions, notification delivery and separate image completion/blocked/overdue states. HTTP acceptance is not image completion. No callback URLs, credentials, leases or world changes.',{},[],true),
+ tool('hunem_record_collection_failure','Report a failed reference, generation, validation or save step for one recorded collection. Keep the original generated file for save retries. Does not alter world or images.',{kind,id,code:{type:'string',enum:collectionFailureCodes}},['kind','id','code']),
  tool('hunem_retry_collection_event','Owner replay of an already delivered meal/soda event with missing image. Stable requestId, max three per 24 hours; never creates a purchase, meal or schedule.',{kind,id,requestId:{type:'string',format:'uuid'}},['kind','id','requestId'])
 ];

@@ -6,7 +6,7 @@ const fail=m=>{throw Error(m);};
 export function referenceUrl(value,host){
  const u=new URL(value),hosts=Array.isArray(host)?host:[host];if(u.protocol!=='https:'||!hosts.includes(u.hostname)||u.username||u.password||u.port)fail('REFERENCE_HOST_REJECTED');return u.href;
 }
-async function bodyBytes(response){
+export async function bodyBytes(response){
  if(!response.ok)fail('REFERENCE_HTTP_'+response.status);
  if(Number(response.headers.get('content-length'))>maxBytes)fail('REFERENCE_TOO_LARGE');
  const reader=response.body?.getReader();if(!reader)fail('REFERENCE_EMPTY');const parts=[];let size=0;
@@ -16,6 +16,7 @@ async function bodyBytes(response){
 export function referenceMime(bytes){
  if(bytes[0]===255&&bytes[1]===216&&bytes[2]===255)return 'image/jpeg';
  if(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))return 'image/png';
+ if(bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP')return 'image/webp';
  fail('REFERENCE_NOT_PNG_OR_JPEG');
 }
 const plain=s=>String(s||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,300);
@@ -46,6 +47,6 @@ export async function collectionReference(row,{fetcher=fetch}={}){
 }
 export function collectionReferenceResult(queue,reference={photos:[],errors:[]}){
  const {photos=[],errors=[]}=reference;
- const instruction='Meal photographs were prepared when the committed plan selected the dish. This drawing read uses cached bytes only: do not search or download another meal reference at drawing time. Inspect the native MCP image blocks visually and pass the visible reference to built-in imagegen with num_last_images_to_include; a local path is not required. If no cached photo is available, leave pending and report the preparation error so background preparation can retry. Saved and verified artwork deletes cached photo bytes but retains source, credit, license and hash records. Photos are appearance candidates, not proof of serving/vendor/ingredients. For soda require the exact brand and flavour official package photo. Never infer extra ingredients.';
+ const instruction=(queue.kind==='soda'?'Soda photos are prepared from the reviewed official brand/flavour catalog illustration package. Follow illustrationPackage and packageSelector; actualPurchasePackageKnown=false does not block drawing this explicitly selected representative. This is not evidence of a historical container choice. ':'Meal photographs were prepared when the committed plan selected the dish. ')+ 'This drawing read uses cached bytes only: do not search or download another reference at drawing time. Inspect native MCP image blocks and pass them to built-in imagegen with num_last_images_to_include; a local path is not required. If no cached photo exists, leave pending and report the preparation error. Verified saved artwork deletes temporary photo bytes but retains provenance. Photos are appearance references, not proof of serving/vendor/ingredients. Never infer extra ingredients.';
  return {content:[{type:'text',text:JSON.stringify({...queue,referencePreparedAt:reference.preparedAt||null,referencePhotos:photos.map(({bytes,mimeType,...p})=>({...p,mimeType})),referenceErrors:errors,referenceInstruction:instruction})},...photos.map(p=>({type:'image',mimeType:p.mimeType,data:Buffer.from(p.bytes).toString('base64')}))],isError:false};
 }

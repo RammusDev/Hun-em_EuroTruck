@@ -75,8 +75,8 @@ export async function POST(req:Request){try{
  if(route==='/api/publication'){
   const body:any=await req.json();
   if(body.op==='collection-reference-prepare'){
-   const {repairMealReference}=await import('../../../lib/collections');
-   return result(await repairMealReference(body.id));
+   const {repairCollectionReference}=await import('../../../lib/collections');
+   return result(await repairCollectionReference(body.kind||'meal',body.id));
   }
   if(body.op==='tour-recovery-read'||body.op==='tour-recovery-commit'){
    if(body.expectedWorldId!==engine.florenceRecovery.worldId)throw new Conflict('FLORENCE_RECOVERY_SCOPE');
