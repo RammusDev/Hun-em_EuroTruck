@@ -1,0 +1,78 @@
+{
+  "checkedOn": "2026-10-27",
+  "catalogVersion": 3,
+  "previousProductsPreserved": 26,
+  "addedProducts": 11,
+  "totalProducts": 37,
+  "countries": ["AT", "BE", "CH", "CZ", "DE", "DK", "EE", "FR", "HR", "HU", "IT", "LI", "LT", "LU", "LV", "NL", "PL", "SI", "SK"],
+  "method": "Web search and page reading of brand/manufacturer product pages; country-facing official ordering/catalogue pages establish simulated selection markets. No claim of individual store stock, real price, or guaranteed zero alcohol in fermented kvass.",
+  "newMarkets": [
+    {
+      "country": "IT",
+      "products": ["sanpellegrino-aranciata", "sanpellegrino-limonata", "sanpellegrino-chino"],
+      "productSources": ["https://www.sanpellegrino.com/it/bibite/aranciata-sanpellegrino", "https://www.sanpellegrino.com/it/bibite/limonata-sanpellegrino", "https://www.sanpellegrino-corporate.it/prodotti/bibite-sanpellegrino"],
+      "marketSource": "https://www.sanpellegrino-corporate.it/prodotti/bibite-sanpellegrino",
+      "basis": "Italian manufacturer catalogue lists all three flavours and formats; Italy product pages describe citrus flavours. Manufacturer origins page confirms production in Italy.",
+      "originSource": "https://www.sanpellegrino.com/it/bibite-sanpellegrino/origini"
+    },
+    {
+      "country": "LI",
+      "products": ["elmer-citro"],
+      "productSources": ["https://www.elmercitro.ch/bergfrische/"],
+      "marketSource": "https://www.getraenkeoase.li/de/elmer-citro-100cl/a%214401/",
+      "basis": "Swiss manufacturer product page plus Liechtenstein retailer's direct product page, categorised as Softdrinks and listed ab Lager. Retailer explicitly identifies Swiss origin; originCountry remains CH. Availability observed is evidence for the selection market, not a lasting store-stock promise."
+    },
+    {
+      "country": "SI",
+      "products": ["cockta-original"],
+      "productSources": ["https://cockta.eu/"],
+      "marketSource": "https://cockta.eu/",
+      "basis": "Official Slovenian site lists Original and describes rosehip and herbs; local purchase promotions and Slovenian-facing brand catalogue support this market."
+    },
+    {
+      "country": "HR",
+      "products": ["pipi-orange"],
+      "productSources": ["https://pipi.com.hr/en/products/"],
+      "marketSource": "https://pipi.com.hr/en/products/",
+      "basis": "Manufacturer's Croatian site lists orange soft drink, formats and Split company contact. Croatian retailer direct listing independently confirms sale.",
+      "additionalMarketSource": "https://www.pevex.hr/gazirano-pice-pipi-narancada-0-5-l"
+    },
+    {
+      "country": "HU",
+      "products": ["marka-szolo"],
+      "productSources": ["https://markaudito.hu/megrendelolap"],
+      "marketSource": "https://markaudito.hu/megrendelolap",
+      "basis": "Manufacturer Hungarian order form lists Szőlő among carbonated soft drinks in multiple formats; product identity and grape flavour supported by official history.",
+      "additionalSource": "https://markaudito.hu/rolunk"
+    },
+    {
+      "country": "SK",
+      "products": ["vinea-biela"],
+      "productSources": ["https://vinea.sk/"],
+      "marketSource": "https://vinea.sk/",
+      "basis": "Official Slovak brand portfolio identifies Vinea Biela and white grape flavour, including portable bottle formats."
+    },
+    {
+      "country": "EE",
+      "products": ["alecoq-classic-kvass"],
+      "productSources": ["https://www.alecoq.ee/en/product/a-le-coq-classic-kvass/"],
+      "marketSource": "https://www.alecoq.ee/hinnakiri/",
+      "basis": "Official manufacturer describes classic fermented kvass with bread flavour; Estonian current price list includes Klassikaline Kali. No ABV figure inferred."
+    },
+    {
+      "country": "LV",
+      "products": ["gardu-muti-rhubarb"],
+      "productSources": ["https://valmiermuiza.lv/collections/gardu-muti-copy"],
+      "marketSource": "https://valmiermuiza.lv/collections/gardu-muti-copy",
+      "basis": "Manufacturer Latvian storefront lists Latvijas rabarberu zelteris; domestic retailer confirms branded carbonated rhubarb drink.",
+      "additionalMarketSource": "https://www.rimi.lv/e-veikals/lv/produkti/dzerieni/limonades/gazetas-limonades/limonade-gardu-muti-rabarberu-zelteris-0-5l/p/1363696"
+    },
+    {
+      "country": "LT",
+      "products": ["gubernija-dark-rye-kvass"],
+      "productSources": ["https://gubernija.lt/kind/gubernijos-gira/"],
+      "marketSource": "https://iki.lt/akcijos/gerimai-kava-arbata/gubernijos-duonos-gira/",
+      "basis": "Official Lithuanian manufacturer identifies dark rye bread kvass and sweet-sour bread flavour. IKI direct product page supports Lithuanian distribution; historical promotion is not a current price promise. No ABV figure inferred."
+    }
+  ]
+}

@@ -22,6 +22,7 @@ test('MCP refuses unauthenticated calls before touching saved diagnostics',async
 test('actual MCP route retains owner gate and reads only a committed snapshot',async()=>{
  const p=fixture();Object.assign(p.world,{diaries:[],publicationWorldId:'test-world'});let reads=0;
  globalThis.__journeyTest={committed:async()=>{reads++;return p;},binaryHash:()=>'',engine:{snapshot:s=>({position:[1,2],truckPosition:[3,4],status:'候車',activity:{kind:'waiting'}})},journeyStatus,pilotRpc,writingPacket:()=>({}),publicationMetrics:()=>({}),fileProbeTool:{name:'probe'},readPlatformPng:()=>{},publicationTools:[],mcpPublicationHandlers:()=>({}),platformOwner:r=>r.headers.get('test-owner')==='yes',platformBootstrap:()=>false,serviceTicket:()=>{throw Error('unexpected write');}};
+ Object.assign(globalThis.__journeyTest,{footprintTools:[],collectionTools:[],env:{},readMonitor:async()=>({health:'ok',issues:[]})});
  let source=fs.readFileSync(new URL('../app/mcp/route.ts',import.meta.url),'utf8').replace(/^import \{([^}]+)\} from [^;]+;/gm,(_,names)=>`const {${names}}=globalThis.__journeyTest;`);
  const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
  const route=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));

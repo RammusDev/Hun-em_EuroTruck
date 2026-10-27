@@ -7,7 +7,7 @@ test('clock ticks retain finance image nodes; changed balances redraw',()=>{
  const fn=source.slice(source.indexOf('function renderFinance(){'),source.indexOf('\nconst time=',source.indexOf('function renderFinance(){')));
  const node=()=>({children:[],replaceChildren(){this.children=[];this.clears=(this.clears||0)+1;},append(...items){this.children.push(...items);},prepend(item){this.children.unshift(item);},setAttribute(){}});
  const summary=node(),ledger=node(),state={finance:{cashCents:10000,fuelLiters:50,entries:[]},heldSoda:{name:'檸檬汽水'}};
- const ctx=vm.createContext({state,$:id=>id==='finance-summary'?summary:ledger,document:{createElement:node}});
+ const ctx=vm.createContext({state,window:{},$:id=>id==='finance-summary'?summary:ledger,document:{createElement:node}});
  vm.runInContext(fn+';renderFinance();',ctx);
  const image=summary.children[0].children[0];
  for(let i=0;i<10;i++){state.now=i;vm.runInContext('renderFinance()',ctx);}
