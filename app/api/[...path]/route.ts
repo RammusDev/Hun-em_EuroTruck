@@ -73,6 +73,15 @@ export async function POST(req:Request){try{
  if(route==='/api/correct-start')return result(await correctStart(await req.json()));
  if(route==='/api/object')return result(await putObject(u.searchParams.get('key')||'',await req.arrayBuffer()));
  if(route==='/api/publication'){
+  if(u.searchParams.get('op')==='collection-reference-import'){
+   if(req.headers.get('content-type')!=='image/png')return result({error:'PNG_REQUIRED'},415);
+   if(Number(req.headers.get('content-length')||0)>1024*1024)return result({error:'REFERENCE_TOO_LARGE'},413);
+   const reader=req.body?.getReader();if(!reader)throw Error('EMPTY_FILE');const chunks=[];let size=0;
+   for(;;){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>1024*1024){await reader.cancel();return result({error:'REFERENCE_TOO_LARGE'},413);}chunks.push(Buffer.from(part.value));}
+   const bytes=Buffer.concat(chunks),{pngReceipt}=await import('../../../bridge/mcp-file.mjs');pngReceipt(bytes);
+   const {cacheSodaReference}=await import('../../../lib/collections');
+   return result(await cacheSodaReference(u.searchParams.get('id')||'',bytes));
+  }
   const body:any=await req.json();
   if(body.op==='collection-runtime-check'){
    const {diagnoseEventClock}=await import('../../../lib/event-diagnostic');

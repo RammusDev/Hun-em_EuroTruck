@@ -1,4 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import ts from 'typescript';import {authorizeWorld,publicReaderView} from '../lib/world-policy.mjs';
+import png from 'pngjs';
 const reader={role:'user',reader:true},owner={role:'user',reader:true,owner:true,adminFresh:true},stale={...owner,adminFresh:false},service={role:'service',scopes:['sync','publication','reference']};
 test('reader API cannot export/configure/publish/reset; stale owner reads only; service is scoped',()=>{
  assert.throws(()=>authorizeWorld(null,'GET','/api/state'),e=>e.status===401);assert.equal(authorizeWorld(reader,'GET','/api/state'),'reader');
@@ -18,6 +19,7 @@ test('actual world HTTP route rejects before runtime access and preserves contro
  source=source.replace("import {journalRecovery} from '../../../lib/journal-recovery.mjs';",'const journalRecovery=async()=>({maintenance:true});').replace("import {env} from 'cloudflare:workers';",'const env={};');
  source=source.replace("import {readMonitor,setMonitorEmail,runMonitor} from '../../../lib/monitor-store.mjs';",'const readMonitor=()=>{throw Error("unexpected monitor access");},setMonitorEmail=readMonitor,runMonitor=readMonitor;');
  source=source.replace("'../../../lib/maintenance.mjs'",JSON.stringify(new URL('../lib/maintenance.mjs',import.meta.url).href));
+ source=source.replace("'../../../bridge/mcp-file.mjs'",JSON.stringify(new URL('../bridge/mcp-file.mjs',import.meta.url).href)).replace("const {cacheSodaReference}=await import('../../../lib/collections');",'const cacheSodaReference=async(id,bytes)=>({id,bytes:bytes.length,worldModified:false});');
  source=source.replace("import {runEventClock,notifyEventTimer} from '../../../bridge/event-runtime.mjs';",'const runEventClock=()=>{},notifyEventTimer=()=>{};').replace("import {collectionRead} from '../../../lib/collections';",'const collectionRead=async()=>({items:[]});');
  source=source.replace("import {footprintRead,footprintQueue,saveFootprint} from '../../../lib/footprints';",'const footprintRead=async()=>({items:[]}),footprintQueue=()=>({}),saveFootprint=()=>{throw Error("unexpected footprint upload");};');
  const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;const route=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
@@ -28,4 +30,10 @@ test('actual world HTTP route rejects before runtime access and preserves contro
  const synced=await get('/api/state');const data=await synced.json();assert.equal(writes,0);assert.equal(reads,2);assert.ok(!('adminToken' in data));assert.equal((await post('/api/publication')).status,403);
  globalThis.__worldActor=owner;assert.equal((await post('/api/config','https://attacker.test')).status,403);assert.equal((await post('/api/reset-world')).status,403);
  globalThis.__worldActor=service;assert.equal((await get('/api/export')).status,403);assert.equal((await post('/api/object?key=archive/private.png')).status,403);
+ const endpoint='https://test.site/api/publication?op=collection-reference-import&id='+'a'.repeat(32),request=(body,headers={})=>new Request(endpoint,{method:'POST',headers:{'content-type':'image/png',...headers},body});
+ assert.equal((await route.POST(request('x',{'content-length':String(1024*1024+1)}))).status,413);
+ assert.equal((await route.POST(request(Buffer.alloc(1024*1024+1)))).status,413,'stream limit applies without Content-Length');
+ assert.equal((await route.POST(request('x',{'content-type':'image/jpeg'}))).status,415);
+ const bytes=png.PNG.sync.write({width:128,height:128,data:Buffer.alloc(128*128*4,255)}),imported=await route.POST(request(bytes));assert.equal(imported.status,200);assert.equal((await imported.json()).worldModified,false);assert.equal(writes,0);
+ globalThis.__worldActor=reader;assert.equal((await route.POST(request(bytes))).status,403);globalThis.__worldActor=owner;assert.equal((await route.POST(request(bytes,{origin:'https://evil.test'}))).status,403);
 });

@@ -6,6 +6,8 @@
 
 原生擁有者工具`hunem_cache_soda_reference`只接受已存在購買的產品及平台原生PNG檔案，實際SHA必須與該品項已核對的來源完全相同；不能提交任意照片、URL或自行聲明來源。沿同一soda準備租約存暫存照片，queue仍純讀；作畫／原圖縮圖驗證後照原規則清除照片並留來源稽核，不建立永久照片池。這是來源拒絕雲端下載時的明確維護備援，不保證所有外部站永不拒絕存取。
 
+若既有外掛連線尚未刷新出新增工具，既有擁有者publication入口可用`op=collection-reference-import`傳同一PNG原始bytes；仍走同一雜湊／購買資格／租約驗證，串流限制1MiB、PNG結構驗證，保持原有擁有者或短效服務票證與Origin限制。不是任意檔案上傳，不提供任意來源網址或圖鑑成品上傳替代。
+
 ## 同日後續：封存依賴缺漏修復
 
 收藏功能完成驗證時另發現，先前107僅移植publication-queue區塊，漏掉其引用的multilingualWritingInstruction與taiwanPlaceInstruction，導致23:00封存拋ReferenceError、背景回503。正式112增加安全clock錯誤碼；113加入擁有者限定的uncommitted交易副本診斷（無自訂時間、無世界／日記提交）；114只加入已核准的寫作指引常數及既有台灣地名共用模組匯入，核心其他內容維持。新增編譯core實際23:00封存測試，不能再以午餐扣款測試代替封存驗收。
