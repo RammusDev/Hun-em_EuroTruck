@@ -1,6 +1,6 @@
 {
-  "version": "soda-packages-20261027-v1",
-  "checkedOn": "2026-10-27",
+  "version": "soda-packages-20261028-v2",
+  "checkedOn": "2026-10-28",
   "policy": "Explicit catalog illustration representative. Never overwrite historical purchased package facts. One producer-submitted 2020 historic package is labeled; unconfirmed capacities remain null.",
   "allowedImageHosts": [
     "almdudler.com",
@@ -522,20 +522,41 @@
     {
       "id": "sanpellegrino-aranciata",
       "status": "verified",
-      "title": "sanpellegrino-aranciata",
+      "title": "Sanpellegrino Aranciata 330mL — official global package",
       "packageKind": "can",
       "sizeMl": 330,
-      "packageSelector": null,
-      "sourcePage": "https://www.sanpellegrino.com/it/bibite/aranciata-sanpellegrino",
-      "sourceImage": "https://www.sanpellegrino.com/it/sites/g/files/xknfdk2141/files/styles/product_fallback/public/2025-06/lattina-aranciata.33-cl-main.jpg?itok=At_3_GNB",
-      "credit": "Sanpellegrino / official brand site",
-      "license": "Official manufacturer photograph; rights retained; temporary appearance reference only",
-      "checkedOn": "2026-10-27",
-      "sourceType": "manufacturer-or-linked-cdn",
+      "packageSelector": "Use only the single upright orange/navy 330ml ARANCIATA can. Preserve its visible global English label; do not relabel it as an Italian-market package.",
+      "sourcePage": "https://www.sanpellegrino.com/beverages/aranciata",
+      "sourceImage": "https://www.sanpellegrino.com/sites/g/files/xknfdk1986/files/styles/generic_image_style_fallback/public/2025-06/aranciata-drink-single-can-overlay.png?itok=H6iiyZkv",
+      "credit": "Sanpellegrino / official global brand site",
+      "license": "Official manufacturer product photograph; rights retained; temporary appearance reference only",
+      "checkedOn": "2026-10-28",
+      "sourceType": "official-global-brand-product",
       "sourceYear": null,
       "referenceRole": "representative-official-package-not-historical-purchase-evidence",
       "brand": "Sanpellegrino",
-      "flavour": "柳橙"
+      "flavour": "柳橙",
+      "sha256": "5b2a435cff1e6cb70b67530bee22309bcce390aa9a60e948cdcc1998f3100fc1",
+      "alternatives": [
+        {
+          "sourcePage": "https://www.sanpellegrino.com/beverages/aranciata",
+          "sourceImage": "https://www.sanpellegrino.com/sites/g/files/xknfdk1986/files/styles/product_fallback/public/2025-06/aranciata-can-33-cl-main-image.jpg?itok=EBy_qZls",
+          "sha256": "aec62c9f94795062cb2dad5195a335670f0f89f46c25b97b14a6e37b1afc6c04",
+          "credit": "Sanpellegrino / official global brand site",
+          "license": "Official manufacturer product photograph; rights retained; temporary appearance reference only",
+          "checkedOn": "2026-10-28",
+          "packageSelector": "Use only the ARANCIATA can from the official photograph; omit the surrounding whole oranges.",
+          "title": "Sanpellegrino Aranciata 330mL — official global package"
+        },
+        {
+          "sourcePage": "https://www.sanpellegrino.com/it/bibite/aranciata-sanpellegrino",
+          "sourceImage": "https://www.sanpellegrino.com/it/sites/g/files/xknfdk2141/files/styles/product_fallback/public/2025-06/lattina-aranciata.33-cl-main.jpg?itok=At_3_GNB",
+          "credit": "Sanpellegrino / official brand site",
+          "license": "Official manufacturer photograph; rights retained; temporary appearance reference only",
+          "checkedOn": "2026-10-27",
+          "packageSelector": null
+        }
+      ]
     },
     {
       "id": "sanpellegrino-limonata",

@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {sodaReference,sodaPackageReference,sodaReferenceCatalog,sodaReferenceCache} from '../bridge/soda-reference.mjs';
+import {sodaReference,sodaPackageReference,sodaReferenceCatalog,sodaReferenceCache,reviewedSodaPhoto} from '../bridge/soda-reference.mjs';
+import {createHash} from 'node:crypto';
 const jpeg=Buffer.from([255,216,255,224,0,1]),row={kind:'soda',identity:'sanpellegrino-limonata',name:'Sanpellegrino Limonata Naturali'};
 test('all 37 catalog products have reviewed packages; historic source and unknown capacities remain explicit',()=>{
  const products=sodaReferenceCatalog.products;assert.equal(products.length,37);assert.equal(new Set(products.map(p=>p.id)).size,37);
@@ -18,4 +19,15 @@ test('cached soda photo reads never fetch and verified save removes only that so
  const id='b'.repeat(32);let calls=0;const cache=sodaReferenceCache({bucket,now:()=>1000,lookup:async()=>{calls++;return {photos:[{bytes:jpeg,mimeType:'image/jpeg',sourcePage:'https://example.org',license:'official'}],errors:[]};}});
  await cache.prepare({...row,id});await cache.read(id);await cache.read(id);assert.equal(calls,1);assert.ok(objects.has('reference-photos/soda-v1/'+id+'.json'));assert.ok(!objects.has('reference-photos/meal-v2/'+id+'.json'));
  const {createHash}=await import('node:crypto');await bucket.put('art.png',jpeg);await bucket.put('thumb.jpg',jpeg);await cache.finish(id,{src:'/art.png',thumbnail:'/thumb.jpg',sha256:createHash('sha256').update(jpeg).digest('hex')});assert.ok(!objects.has('reference-photos/soda-v1/'+id+'.json'));assert.ok(objects.has('reference-audit/soda/'+id+'.json'));
+});
+test('a refused official source falls back within the reviewed list; source changes and arbitrary bytes are rejected',async()=>{
+ const row={kind:'soda',identity:'sanpellegrino-aranciata'},p=sodaPackageReference(row),saved=structuredClone(p),digest=createHash('sha256').update(jpeg).digest('hex');
+ try{
+  p.alternatives[0].sha256=digest;let calls=0;
+  const r=await sodaReference(row,{fetcher:async(url,init)=>{assert.ok(init.headers['User-Agent'].startsWith('HunEmTravel/'));assert.equal(init.redirect,'manual');calls++;return calls===1?new Response(null,{status:403}):new Response(jpeg);}});
+  assert.equal(calls,2);assert.equal(r.photos.length,1);assert.equal(r.photos[0].sourceImage,p.alternatives[0].sourceImage);assert.ok(r.errors.includes('REFERENCE_HTTP_403'));
+  const photo=reviewedSodaPhoto(row,jpeg);assert.equal(photo.sourceImage,p.alternatives[0].sourceImage);assert.equal(photo.preparationMethod,'owner-reviewed-original');
+  assert.throws(()=>reviewedSodaPhoto(row,Buffer.from('unreviewed bytes')),/REVIEWED_HASH_REQUIRED/);assert.throws(()=>reviewedSodaPhoto(row,Buffer.alloc(1024*1024+1)),/TOO_LARGE/);
+  const changed=await sodaReference(row,{fetcher:async()=>new Response(Buffer.from([255,216,255,5]))});assert.ok(changed.errors.includes('REFERENCE_SOURCE_CHANGED'));
+ }finally{Object.assign(p,saved);}
 });

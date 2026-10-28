@@ -6,7 +6,7 @@ import {makeReferencePreview} from '../bridge/reference-preview.mjs';
 import {validateCollectionImage} from '../bridge/collection-image.mjs';
 import {collectionReferenceResult} from '../bridge/collection-reference.mjs';
 import {mealReferenceCache,selectedMealReferences} from '../bridge/meal-reference-cache.mjs';
-import {sodaReferenceCache,sodaPackageReference} from '../bridge/soda-reference.mjs';
+import {sodaReferenceCache,sodaPackageReference,reviewedSodaPhoto} from '../bridge/soda-reference.mjs';
 import {verifyCollectionArtifacts} from '../bridge/collection-artifacts.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const valid=(kind:string,id?:string)=>{if(!collectionKinds.includes(kind)||id!==undefined&&!/^[a-f0-9]{32}$/.test(id))throw Error('INVALID_COLLECTION');};
@@ -68,6 +68,16 @@ export async function repairMealReference(id:string){
  await prepareMealReferences(p,id);
  const {photos,errors,preparedAt}=await mealReferenceCache({bucket:bucket()}).read(id);
  return {id,preparedAt,errors,photos:photos.map(({bytes,...photo}:any)=>photo),worldModified:false};
+}
+// Owner-only repair path; the native file bytes must match a reviewed source hash.
+export async function cacheSodaReference(id:string,bytes:Buffer){
+ valid('soda',id);const p=await committed(),row=(await collectionRows('soda',p)).find((r:any)=>r.id===id);
+ if(!row?.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');if(row.image)return {id,action:'already-drawn',worldModified:false};
+ const photo=reviewedSodaPhoto(row,bytes),lock='soda-reference-preparation',lease=crypto.randomUUID(),at=Date.now();
+ await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(lock,'{}',at).run();
+ if(!await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,at+60000,lock,at).first())throw Error('REFERENCE_PREPARATION_BUSY');
+ try{const cache=mealReferenceCache({bucket:bucket(),kind:'soda',lookup:async()=>({photos:[photo],errors:[]}),lookupVersion:'reviewed-owner-import:'+id+':20261028'});await cache.prepare(row);const r=await cache.read(id);return {id,preparedAt:r.preparedAt,photos:r.photos.map(({bytes,...p}:any)=>p),errors:r.errors,worldModified:false};
+ }finally{await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(lock,lease).run();}
 }
 export async function claimCollection(kind:string,id:string){
  valid(kind,id);const row=(await collectionRows(kind)).find((r:any)=>r.id===id);if(!row||!row.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');if(row.image)return {action:'already-drawn',kind,id};
