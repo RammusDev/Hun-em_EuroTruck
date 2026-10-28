@@ -22,6 +22,7 @@
 
 ## 程式入口
 
+- 參考交接由COLLECTION_REFERENCES.md定義：三類取得的照片先保存，同一工作重試沿用；背景403不再阻擋原抽選任務取得照片。已記錄抽選的新成品若沒有保存參考，收圖回報REFERENCE_HANDOFF_REQUIRED。照片只作參考，仍須內建imagegen實際生成成品；不改活動完成門檻。
 - bridge/sketch-lifecycle.mjs是唯一共用的抽選、完成門檻與公開流程。讀取已保存eventPlan私有事件／當前已選定活動，不讀研究候選；選定紀錄保存在既有D1表的sketch-selection前綴，同一抽選重算預覽不移動訂閱水位。
 - collection-events／footprint-events只為已記錄抽選通知AI，沿原租約、穩定事件ID及有界重試。為保持既有訂閱，傳輸名稱hunem.meal_completed／hunem.soda_purchased／hunem.landmark_visited暫留作相容識別字；**名稱不再決定觸發時點**，事件說明、payload及原生工具指引已改為抽選預繪。
 - lib/collections.ts與lib/footprints.ts保存sketchVersion=2、publishedAt=null的私有圖。讀者列表及原圖／縮圖端點只看完成門檻與發布metadata；原有不帶版本的已公開紀錄保留，不重寫歷史。

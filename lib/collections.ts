@@ -41,16 +41,16 @@ export async function prepareMealReferences(p:any,onlyId?:string){
  const acquired=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,at+60000,lock,at).first();if(!acquired)return;
  try{
  const cache=mealReferenceCache({bucket:bucket()}),rows=await collectionRows('meal',p,true),drawn=new Map(rows.filter((r:any)=>r.image).map((r:any)=>[r.id,r.image]));
- await cache.sweep(drawn);
- let attempts=0;for(const row of rows.filter((r:any)=>!r.image&&(!onlyId||r.id===onlyId)).slice(0,16)){if(!await cache.shouldPrepare(row.id))continue;await cache.prepare(row);const latest=(await collectionRows('meal',undefined,true)).find((r:any)=>r.id===row.id);if(latest?.image)await cache.finish(row.id,latest.image);if(++attempts>=2)break;}
+ await cache.sweep(drawn,new Set(rows.filter((r:any)=>!r.image).map((r:any)=>r.id)));
+ let attempts=0;for(const row of rows.filter((r:any)=>!r.image&&(onlyId? r.id===onlyId:Number.isFinite(r.selectedAt))).slice(0,16)){if(!await cache.shouldPrepare(row.id))continue;await cache.prepare(row);const latest=(await collectionRows('meal',undefined,true)).find((r:any)=>r.id===row.id);if(latest?.image)await cache.finish(row.id,latest.image);if(++attempts>=2)break;}
  }finally{await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(lock,lease).run();}
 }
 export async function prepareSodaReferences(p:any,onlyId?:string){
  const lock='soda-reference-preparation',lease=crypto.randomUUID(),at=Date.now();
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(lock,'{}',at).run();
  if(!await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,at+60000,lock,at).first())return;
- try{const cache=sodaReferenceCache({bucket:bucket()}),rows=await collectionRows('soda',p,true),drawn=new Map(rows.filter((r:any)=>r.image).map((r:any)=>[r.id,r.image]));await cache.sweep(drawn);let attempts=0;
-  for(const row of rows.filter((r:any)=>!r.image&&(!onlyId||r.id===onlyId)).slice(0,16)){if(!await cache.shouldPrepare(row.id))continue;await cache.prepare(row);const latest=(await collectionRows('soda',undefined,true)).find((r:any)=>r.id===row.id);if(latest?.image)await cache.finish(row.id,latest.image);if(++attempts>=2)break;}
+ try{const cache=sodaReferenceCache({bucket:bucket()}),rows=await collectionRows('soda',p,true),drawn=new Map(rows.filter((r:any)=>r.image).map((r:any)=>[r.id,r.image]));await cache.sweep(drawn,new Set(rows.filter((r:any)=>!r.image).map((r:any)=>r.id)));let attempts=0;
+  for(const row of rows.filter((r:any)=>!r.image&&(onlyId? r.id===onlyId:Number.isFinite(r.selectedAt))).slice(0,16)){if(!await cache.shouldPrepare(row.id))continue;await cache.prepare(row);const latest=(await collectionRows('soda',undefined,true)).find((r:any)=>r.id===row.id);if(latest?.image)await cache.finish(row.id,latest.image);if(++attempts>=2)break;}
  }finally{await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(lock,lease).run();}
 }
 export async function repairCollectionReference(kind:string,id:string){
@@ -94,6 +94,8 @@ export async function saveCollection(kind:string,id:string,lease:string,bytes:Bu
   const saved=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('collection:'+kind+':'+id).first<any>();
   return {kind,id,...JSON.parse(saved.value),reused:true,worldModified:false};
  }
+ const reference=await (kind==='meal'?mealReferenceCache({bucket:bucket()}):sodaReferenceCache({bucket:bucket()})).read(id);
+ if(row.selectionRecorded&&!reference.photos.length)throw Error('REFERENCE_HANDOFF_REQUIRED');
  const claimKey='collection-claim:'+kind+':'+id,claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind(claimKey).first<any>();
  if(typeof lease!=='string'||!claim||claim.lease!==lease||claim.lease_until<Date.now())throw Error('COLLECTION_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.subjectRecognizable!==true||!review.originalGeneratedPath)throw Error('COLLECTION_REVIEW_REQUIRED');

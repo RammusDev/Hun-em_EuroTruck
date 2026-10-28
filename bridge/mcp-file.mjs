@@ -1,12 +1,22 @@
 import {createHash} from 'node:crypto';
 export const fileSchema={type:'object',properties:{download_url:{type:'string'},file_id:{type:'string'},mime_type:{type:'string'},file_name:{type:'string'}},required:['download_url','file_id'],additionalProperties:false};
 export const fileProbeTool={name:'hunem_test_file_transfer',description:'Test native file-parameter delivery of a PNG. Returns only hash and dimensions; never publishes or changes the world.',inputSchema:{type:'object',properties:{file:fileSchema,nonce:{type:'string',maxLength:64}},required:['file'],additionalProperties:false},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:true},_meta:{'openai/fileParams':['file']}};
-export function validateFileUrl(file){
+export function validateFileUrl(file,reference=false){
  if(!file||typeof file.file_id!=='string'||!file.file_id.trim())throw Error('FILE_REFERENCE_REQUIRED');
  const u=new URL(file.download_url);
  if(u.protocol!=='https:'||u.username||u.password||u.port||!(u.hostname==='files.oaiusercontent.com'||u.hostname.endsWith('.oaiusercontent.com')||u.hostname.endsWith('.blob.core.windows.net')))throw Error('UNSUPPORTED_FILE_DOWNLOAD_HOST');
- if(file.mime_type&&file.mime_type!=='image/png')throw Error('PNG_REQUIRED');
+ if(file.mime_type&&!(reference?['image/png','image/jpeg','image/webp']:['image/png']).includes(file.mime_type))throw Error('PNG_REQUIRED');
  return u;
+}
+export async function readPlatformReference(file,fetcher=fetch){
+ const url=validateFileUrl(file,true),r=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(30000)});
+ if(!r.ok)throw Error('FILE_DOWNLOAD_FAILED');
+ if(Number(r.headers.get('content-length'))>1024*1024)throw Error('REFERENCE_TOO_LARGE');
+ const reader=r.body?.getReader();if(!reader)throw Error('EMPTY_FILE');const chunks=[];let length=0;
+ try{for(;;){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>1024*1024)throw Error('REFERENCE_TOO_LARGE');chunks.push(Buffer.from(value));}}catch(e){await reader.cancel();throw e;}
+ const bytes=Buffer.concat(chunks);
+ const {referenceMime}=await import('./collection-reference.mjs');referenceMime(bytes);
+ return {bytes};
 }
 export function pngReceipt(bytes){
  if(bytes.length<45||bytes.length>8*1024*1024||bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw Error('INVALID_PNG');

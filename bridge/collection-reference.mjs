@@ -1,4 +1,5 @@
 import {referenceFallbacks} from './collection-reference-fallback.mjs';
+import {referenceHandoffInstruction} from './reference-handoff-instruction.mjs';
 // Public visual reference candidates, delivered as native MCP image blocks.
 // Never fetch arbitrary item/source URLs or require a model-side downloader.
 const maxBytes=1024*1024;
@@ -47,6 +48,6 @@ export async function collectionReference(row,{fetcher=fetch}={}){
 }
 export function collectionReferenceResult(queue,reference={photos:[],errors:[]}){
  const {photos=[],errors=[]}=reference;
- const instruction=(queue.kind==='soda'?'Soda photos are prepared from the reviewed official brand/flavour catalog illustration package. Follow illustrationPackage and packageSelector; actualPurchasePackageKnown=false does not block drawing this explicitly selected representative. This is not evidence of a historical container choice. ':'Meal photographs were prepared when the committed plan selected the dish. ')+ 'This drawing read uses cached bytes only: do not search or download another reference at drawing time. Inspect native MCP image blocks and pass them to built-in imagegen with num_last_images_to_include; a local path is not required. If no cached photo exists, leave pending and report the preparation error. Verified saved artwork deletes temporary photo bytes but retains provenance. Photos are appearance references, not proof of serving/vendor/ingredients. Never infer extra ingredients.';
+ const instruction=referenceHandoffInstruction+' Inspect saved native MCP image blocks and pass them to built-in imagegen with num_last_images_to_include if no local path exists. Verified artwork clears temporary reference bytes but retains provenance. Photos are not proof of a purchase, serving or visit.';
  return {content:[{type:'text',text:JSON.stringify({...queue,referencePreparedAt:reference.preparedAt||null,referencePhotos:photos.map(({bytes,mimeType,...p})=>({...p,mimeType})),referenceErrors:errors,referenceInstruction:instruction})},...photos.map(p=>({type:'image',mimeType:p.mimeType,data:Buffer.from(p.bytes).toString('base64')}))],isError:false};
 }

@@ -7,15 +7,17 @@ const defaultLookupVersion='meal-reference-v3-official-arancini';
 const safeErrors=errors=>[...new Set((Array.isArray(errors)?errors:[]).map(e=>/^REFERENCE_[A-Z0-9_]{1,80}$/.test(e)?e:/timeout|abort/i.test(String(e))?'REFERENCE_TIMEOUT':'REFERENCE_FETCH_FAILED'))].slice(0,8);
 const boundedLookup=row=>{const deadline=AbortSignal.timeout(8000);return collectionReference(row,{fetcher:(url,init)=>fetch(url,{...init,signal:AbortSignal.any([deadline,init.signal].filter(Boolean))})});};
 export function mealReferenceCache({bucket,lookup=boundedLookup,now=Date.now,kind='meal',lookupVersion=defaultLookupVersion}){
- if(!['meal','soda'].includes(kind))throw Error('INVALID_COLLECTION_KIND');
- const prefix=kind==='meal'?'reference-photos/meal-v2/':'reference-photos/soda-v1/';
+ if(!['meal','soda','footprint'].includes(kind))throw Error('INVALID_COLLECTION_KIND');
+ const prefix=kind==='meal'?'reference-photos/meal-v2/':`reference-photos/${kind}-v1/`;
  const key=id=>prefix+id+'.json',audit=id=>'reference-audit/'+kind+'/'+id+'.json';
  const readJson=async k=>{const o=await bucket.get(k);return o?o.json():null;};
  const usable=c=>{try{return c?.photos?.length>0&&c.photos.every(p=>{const b=Buffer.from(p.data,'base64');return b.length<=1024*1024&&referenceMime(b)===p.mimeType&&hash(b)===p.sha256;});}catch{return false;}};
- const reusable=c=>c?.expiresAt>now()&&(usable(c)||!c.photos?.length&&c.lookupVersion===lookupVersion&&c.retryAt>now());
+ // A successful handoff stays usable until artwork verification; a retry must not
+ // throw away the only photo and fetch the same remote URL again.
+ const reusable=c=>usable(c)||c?.expiresAt>now()&&!c.photos?.length&&c.lookupVersion===lookupVersion&&c.retryAt>now();
  async function read(id){
   let c;try{c=await readJson(key(id));}catch{}
-  if(!c||c.expiresAt<=now()||!c.photos?.length)return {photos:[],errors:c?.status==='failed'?['REFERENCE_PREPARATION_FAILED',...safeErrors(c.errors)]:['REFERENCE_NOT_PREPARED'],preparedAt:c?.at||null};
+  if(!c||!c.photos?.length)return {photos:[],errors:c?.status==='failed'?['REFERENCE_PREPARATION_FAILED',...safeErrors(c.errors)]:['REFERENCE_NOT_PREPARED'],preparedAt:c?.at||null};
   try{const photos=c.photos.map(({data,...p})=>({...p,bytes:Buffer.from(data,'base64')}));if(!photos.every(p=>p.bytes.length<=1024*1024&&referenceMime(p.bytes)===p.mimeType&&hash(p.bytes)===p.sha256))throw Error();return {photos,errors:[],preparedAt:c.at};}catch{return {photos:[],errors:['REFERENCE_CACHE_INVALID']};}
  }
  async function prepare(row){
@@ -37,13 +39,14 @@ export function mealReferenceCache({bucket,lookup=boundedLookup,now=Date.now,kin
   if(hash(Buffer.from(a))!==image.sha256||!b.byteLength||referenceMime(Buffer.from(b))!=='image/jpeg')throw Error('COLLECTION_ARTIFACT_READBACK_FAILED');
   await remove(id,'artwork-verified');
  }
- async function sweep(drawn=new Map()){
+ async function sweep(drawn=new Map(),pending=new Set()){
   // Bounded page, with a persisted cursor: no new cron and no full-bucket scan.
-  const cursorKey=kind==='meal'?'reference-maintenance/meal-v2-cursor.json':'reference-maintenance/soda-cursor.json',state=await readJson(cursorKey);
+  const cursorKey=kind==='meal'?'reference-maintenance/meal-v2-cursor.json':`reference-maintenance/${kind}-cursor.json`,state=await readJson(cursorKey);
   const list=await bucket.list({prefix:'reference-photos/'+kind+'-',limit:32,...(state?.cursor?{cursor:state.cursor}:{})});
   for(const o of list.objects){const id=new RegExp(kind+'-v[12]/([a-f0-9]{32})\\.json$').exec(o.key)?.[1];if(!id)continue;
    if(drawn.has(id)){try{await finish(id,drawn.get(id));}catch{/* retain evidence until artifacts are readable */}continue;}
-   const c=await readJson(o.key);if(c&&(c.expiresAt||c.at+ttl)<=now()){if(o.key===key(id))await remove(id,'expired');else await bucket.delete(o.key);}
+   const c=await readJson(o.key);if(pending.has(id)&&usable(c))continue;
+   if(c&&(c.expiresAt||c.at+ttl)<=now()){if(o.key===key(id))await remove(id,'expired');else await bucket.delete(o.key);}
   }
   await bucket.put(cursorKey,JSON.stringify({cursor:list.truncated?list.cursor:null}));
  }

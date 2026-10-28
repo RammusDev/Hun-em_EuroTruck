@@ -46,7 +46,7 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
   for(const sub of subs)for(const row of rows){
    // Subscription start is a durable watermark: history appears in the UI but never floods AI.
    const occurrence={time:row.selectedAt};if(!Number.isFinite(occurrence.time)||occurrence.time<sub.createdAt)continue;
-   if(!await ready(row))continue;
+   // Missing cloud photos must still reach the native reference acquisition task.
    if(attempted>=2)return {subscriptions:subs.length,delivered};
    const eventId=kind+'_'+hash(sub.key+'\n'+row.id).slice(0,40),key=deliveryPrefix+eventId,old=await get(key);
    if(old&&(old.status==='sent'||old.status==='stopped'||old.nextAt>now()))continue;

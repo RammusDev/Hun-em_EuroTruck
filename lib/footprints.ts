@@ -5,6 +5,9 @@ import {pngReceipt} from '../bridge/mcp-file.mjs';
 import {makeReferencePreview} from '../bridge/reference-preview.mjs';
 import {drawingSketches,sketchIsPublic,publishCompletedSketches} from '../bridge/sketch-lifecycle.mjs';
 import {verifyCollectionArtifacts} from '../bridge/collection-artifacts.mjs';
+import {footprintReferenceCache} from '../bridge/footprint-reference.mjs';
+import {referenceHandoffInstruction} from '../bridge/reference-handoff-instruction.mjs';
+import {collectionReferenceResult} from '../bridge/collection-reference.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const isId=(id:any)=>typeof id==='string'&&/^[a-f0-9]{32}$/.test(id);
 export async function footprints(drawing=false){
@@ -21,8 +24,36 @@ export async function footprintRead(u:URL){
  let filtered=selected;if(u.searchParams.has('area')){const area=u.searchParams.get('area')!.split(',').map(Number);if(area.length!==4||!area.every(Number.isFinite)||area[0]>area[2]||area[1]>area[3]||Math.abs(area[0])>180||Math.abs(area[2])>180||Math.abs(area[1])>90||Math.abs(area[3])>90)throw Error('INVALID_BOUNDS');filtered=selected.filter((r:any)=>r.p&&r.p[0]>=area[0]&&r.p[0]<=area[2]&&r.p[1]>=area[1]&&r.p[1]<=area[3]);}
  return {total:filtered.length,overallTotal:rows.length,page,hasMore:!id&&(page+1)*12<filtered.length,items:id?filtered:filtered.slice(page*12,(page+1)*12),timeZone:'Europe/Berlin'};
 }
-export async function footprintQueue(){
+async function footprintQueueData(){
  const rows=await footprints(true);return {pending:rows.filter((r:any)=>!r.image).length,items:rows.filter((r:any)=>!r.image).sort((a:any,b:any)=>a.firstSeenAt-b.firstSeenAt).slice(0,8),instructions:'For a committed landmark selection, process only its footprintId now, before completion and independently of nightly journals. Saving stores private prepared art; a real completed visit releases it. Do not wait for a visit to finish and do not redraw at completion. Call hunem_claim_footprint BEFORE imagegen; generate only for action=generate, skip busy/already-drawn. Pass its lease to hunem_receive_footprint. Generate ONE distinct quick pencil-and-watercolor recognizable landmark sketch per item with image_gen.imagegen. Inspect real current photographs and pass available photos through referenced_image_paths as architecture references: preserve silhouette, proportions, windows and tower shape, including present-day remains for demolished sites. Choose a real distinctive viewpoint, natural subject size and sparse broken pencil lines with light washes; avoid a fixed three-quarter view, forced centering, a fixed 80-90 percent size or polished architectural rendering. Compare recent sketches when available, without inventing or mirroring architecture for variety. If reliable visual reference is unavailable, leave pending and report. No generic category icon, text, collage, or reused daily illustration. Square PNG, transparent background, landmark only; verify actual dimensions and alpha before submitting. actuallyCalled and landmarkRecognizable must reflect real generation and visual review. Ordinary event saves are immutable and reused for revisits; explicit owner-requested corrections alone use hunem_replace_footprint with current expectedSha256. Never claim, rewrite or publish a journal from a visit event. Pending sketches survive retries; the daily journal cutoff is unchanged.'};
+}
+export async function footprintQueue(id?:string){
+ if(id!==undefined&&!isId(id))throw Error('INVALID_FOOTPRINT');
+ const queue=await footprintQueueData();
+ const data={...queue,items:queue.items.filter((r:any)=>!id||r.id===id),instructions:queue.instructions+' '+referenceHandoffInstruction};
+ if(!id)return data;
+ const row=(await footprints(true)).find((r:any)=>r.id===id);
+ data.items=row&&!row.image?[row]:[];
+ const reference:any=row&&!row.image?await footprintReferenceCache({bucket:bucket()}).read(id):{photos:[],errors:[],preparedAt:null};
+ return collectionReferenceResult({...data,kind:'footprint',referenceCollectionId:id},reference);
+}
+export async function prepareFootprintReferences(p:any){
+ const lock='footprint-reference-preparation',lease=crypto.randomUUID(),at=Date.now();
+ await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(lock,'{}',at).run();
+ if(!await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,at+60000,lock,at).first())return;
+ try{
+  const rows=await drawingSketches(db(),p,'footprint'),cache=footprintReferenceCache({bucket:bucket()});
+  const saved=await db().prepare("SELECT id,value FROM hunem_runtime WHERE id LIKE 'footprint:%'").all<any>();
+  const drawn=new Map((saved.results||[]).map((r:any)=>[r.id.slice(10),JSON.parse(r.value)]));
+  await cache.sweep(drawn,new Set(rows.filter((r:any)=>!drawn.has(r.id)).map((r:any)=>r.id)));
+  let attempts=0;for(const row of rows.filter((r:any)=>!drawn.has(r.id)&&Number.isFinite(r.selectedAt)).slice(0,16)){
+   if(!await cache.shouldPrepare(row.id))continue;
+   await cache.prepare(row);
+   const latest=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('footprint:'+row.id).first<any>();
+   if(latest)await cache.finish(row.id,JSON.parse(latest.value));
+   if(++attempts>=2)break;
+  }
+ }finally{await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(lock,lease).run();}
 }
 export async function claimFootprint(id:string){
  if(!isId(id))throw Error('INVALID_FOOTPRINT');const row=(await footprints(true)).find((r:any)=>r.id===id);if(!row)throw Error('VISIT_REQUIRED');if(row.image)return {action:'already-drawn',id};
@@ -42,6 +73,8 @@ export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:str
   return {...JSON.parse(saved.value),reused:true};
  }
  const claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind('footprint-claim:'+id).first<any>();
+ const reference=await footprintReferenceCache({bucket:bucket()}).read(id);
+ if(row.selectionRecorded&&!reference.photos.length)throw Error('REFERENCE_HANDOFF_REQUIRED');
  if((claim||lease)&&(!claim||claim.lease!==lease||claim.lease_until<Date.now()))throw Error('FOOTPRINT_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.landmarkRecognizable!==true||!review.originalGeneratedPath)throw Error('FOOTPRINT_REVIEW_REQUIRED');
  if(receipt.width!==receipt.height)throw Error('SQUARE_PNG_REQUIRED');
@@ -56,6 +89,7 @@ export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:str
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('footprint:'+id,JSON.stringify(image),Date.now()).run();
  const saved=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('footprint:'+id).first<any>();
  const result=JSON.parse(saved.value);if(result.sha256!==receipt.sha256)throw Error('FOOTPRINT_ALREADY_DRAWN');
+ await footprintReferenceCache({bucket:bucket()}).finish(id,result);
  if(lease)await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind('footprint-claim:'+id,lease).run();
  await publishCompletedSketches({db:db(),bucket:bucket(),p:await committed(),onlyKind:'footprint',onlyId:id});
  const released=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('footprint:'+id).first<any>();

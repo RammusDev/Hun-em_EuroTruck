@@ -1,6 +1,7 @@
 import {env} from 'cloudflare:workers';
 import {collectionEventService} from '../bridge/collection-events.mjs';
 import {footprintEvents} from './footprint-events';
+import {prepareFootprintReferences} from './footprints';
 import {prepareMealReferences,prepareSodaReferences} from './collections';
 import {mealReferenceCache} from '../bridge/meal-reference-cache.mjs';
 import {sodaReferenceCache} from '../bridge/soda-reference.mjs';
@@ -17,6 +18,7 @@ export async function processSketchEvents(p:any){
  // Independent delivery domains; one failure cannot starve the others or roll back the world.
  const meal=async()=>{try{await prepareMealReferences(p);}catch{console.log('meal-reference-preparation-pending');}return collectionEvents('meal').process(p);};
  const soda=async()=>{try{await prepareSodaReferences(p);}catch{console.log('soda-reference-preparation-pending');}return collectionEvents('soda').process(p);};
- const results=await Promise.allSettled([footprintEvents().process(p),meal(),soda()]);
+ const footprint=async()=>{try{await prepareFootprintReferences(p);}catch{console.log('footprint-reference-preparation-pending');}return footprintEvents().process(p);};
+ const results=await Promise.allSettled([footprint(),meal(),soda()]);
  for(const r of results)if(r.status==='rejected')console.log('sketch-event-delivery-pending');
 }
