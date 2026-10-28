@@ -18,13 +18,13 @@ visit只在參觀完成後出現；meal_finished只在用餐30分鐘後出現；
 
 餐點種類仍為國別靜態設定與模擬估價；記錄實際用餐位置，不新增餐館或假定查到的地方料理已吃過。城市代表點散步不是查核景點，不發錯誤名勝初訪。任意很晚下班不保證能完成第一站；時間不足就不虛構造訪。
 
-決策、時間、循環及事件全為純程式，不呼叫AI。日記研究素材僅取當天已訪題材最多8筆及飲食背景最多1筆，候選清單不全送AI；前端亦不輸出tourPlans。原有五時段純程式排程、23:05 AI寫作、背景4秒／兩批研究預算均不變。
+決策、時間、循環及事件全為純程式，不呼叫AI。日記研究素材僅取當天已訪題材最多8筆及飲食背景最多1筆，候選清單不全送AI；前端亦不輸出tourPlans。行程推進使用EventClock事件架構，網站state保持純讀；舊五時段Cron已停用。唯一23:05 AI日記排程保留。研究來源及預算以目前來源模組與LOCAL_WIKI_VISITS.md為準。
 
 ## 驗證與操作
 
 隔離測試涵蓋48分鐘估時、城市優先、密集多站、全天午晚餐、太晚出發、休息站用餐、重啟一致、完成事件時序、前後端位置一致、30公里格網覆蓋、分批查詢、失敗保留與來源城市證據。舊計畫保存時間及舊一般40km/h接駁也有回歸。
 
-候選來源：lib/touring.mjs、lib/topic-research.mjs、lib/engine-v2.mjs、lib/economy.mjs、public/walk.js與public/app.js。正式來源phase2-world-access包含其打包引擎lib/core.mjs及靜態設定；以scripts/build-background-core.mjs重建，僅同步指定資產，不覆蓋角色、教材或已封存日記。
+共用旅遊邏輯在根lib/touring.mjs、lib/topic-research.mjs、lib/engine-v2.mjs及lib/economy.mjs；目前網站來源為footprints-checkout，包含部署中的編譯核心及UI。依 [來源指南](../SOURCE_MAP.md) 與 [固定檢查](../CHECKS.md) 操作，不執行舊整包核心重建或根UI覆蓋。
 
 測試證據：data/touring-tests.log、data/touring-focused.log及data/background-tick-storage/2026-10-20T08-05-04.649Z/report.json。正式世界不快轉、不重設，不重製舊日記。實際自然行程與背景觸發仍需後續觀察，隔離測試不冒充真實每日旅遊驗收。
 

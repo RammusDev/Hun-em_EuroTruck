@@ -1,10 +1,12 @@
-# 餐點與汽水事件速寫
+# 餐點與汽水：抽選預繪、完成公開
 
-只處理本次事件的kind與collectionId：hunem.meal_completed是已吃完且有來源的地方料理；hunem.soda_purchased是在實際購買時記錄汽水，不表示這瓶已喝完。兩者均以正式提交的事件為準，不改世界與日記，不新增定時工作。
+只處理本次事件的kind與collectionId。hunem.meal_completed／hunem.soda_purchased保留為既有訂閱相容名稱，現在都表示正式已確定抽選的繪圖通知；名稱不是吃完、購買或喝完的完成證明。餐點吃完、汽水同瓶喝完才由服務端公開，作畫任務只保存成品，不自行發布或改世界／日記。
 
-1. hunem_collection_queue(kind,id=collectionId)讀來源，然後hunem_claim_collection(kind,id)。只有action=generate才作圖，busy/already-drawn直接結束。保存返回的20分鐘lease，不輸出lease或憑證。
-2. 核對料理外觀或該品牌／口味的官方瓶罐照片，目視後以referenced_image_paths傳入內建image_gen.imagegen作視覺參考。每款一張獨立快速鉛筆淡水彩、正方形透明PNG。依實物選視角，少量淡彩／簡潔線條，不硬套固定構圖；不編造配料、瓶身或標籤。缺可靠照片就留待繪，不用通用食物／飲料圖代替。不需角色；如有角色必須全黑貓黃圍巾。
-3. 實查PNG寬高相等、有透明背景且主體可見，目視確認種類及產品身份正確，再以hunem_receive_collection(kind,id,lease,file=實際原始PNG絕對路徑,review={tool:"image_gen.imagegen",actuallyCalled:true,subjectRecognizable:true,originalGeneratedPath:實際原圖路徑})原生file收圖。只有真實完成才填true。
-4. 失敗重試沿用已完成原圖。lease過期重新領取；已有有效圖沿用，重吃／重買只累計次數，禁止自動換圖。正常busy／already-drawn安靜結束，實際收圖或需介入錯誤才回報。
+1. 優先讀事件data.kind與data.collectionId，再hunem_collection_queue(kind,id=collectionId)純讀工作及快取參考。若平台觸發文字缺ID，讀hunem_collection_event_status該kind的最新sent收據及hunem_collection_queue(kind)：僅當收據collectionId與唯一候選id相同、可用的名稱／recordedAt對得上其已記錄抽選，才恢復該ID；不以吃完時間、購買完成或喝完作預繪資格。多筆、不符或無法核對就回報識別資料不足，不猜歷史項目。再hunem_claim_collection(kind,id)，只有action=generate才畫；busy／already-drawn結束。保存20分鐘lease，不輸出lease或憑證。
+2. 目視快取的料理外觀或核對過的品牌／口味包裝照片，將可用圖片以referenced_image_paths交內建image_gen.imagegen。每款一張快速鉛筆淡水彩、正方形透明PNG，不編造配料、瓶罐或標籤；缺可靠參考就留待繪。依實物選視角，不硬套固定構圖；不需角色，如有角色仍須全黑貓黃圍巾。
+3. 實查寬高相等、透明背景與主體身份，目視後hunem_receive_collection(kind,id,lease,file=原始PNG,review={tool:"image_gen.imagegen",actuallyCalled:true,subjectRecognizable:true,originalGeneratedPath:實際原圖路徑})原生收圖；只有真實完成才填true。保存、讀回驗證與私下備妥不代表已公開。
+4. 參考、生成、驗證或保存失敗，沿hunem_record_collection_failure支援的有界錯誤碼回報；已生成原圖保留供同圖保存重試，lease過期重新領取，不重新作畫。正常busy／already-drawn保持安靜，實際收圖或需介入錯誤才回報。
 
-訂閱只通知啟用後新發生的合格事件；歷史紀錄先顯示在收藏頁，部署不批次喚起歷史生圖。通知已送達但未成圖時，可由擁有者hunem_retry_collection_event(kind,id,requestId=固定UUID)重送既有事件，24小時最多3次，不新增餐次或購買。HTTP接收與原圖完成分開驗收。平台訂閱以hunem_collection_event_status確認，不能把接口發布當作任務已接通。
+抽選確定與活動完成是兩個獨立觸發點：完成事件只公開備妥成品，不建立另一份AI繪圖工作。完成仍缺圖只重試原抽選工作，公開讀回失敗只重試公開；不新增定時工作、重算餐次或購買。
+
+通知HTTP200不代表圖片完成。訂閱／投遞／成品狀態由hunem_collection_event_status核對，沿既有watermark、租約、受限重試及穩定ID防重；不自動批次補畫歷史。擁有者明確維修可重送既有工作，不新增事件。
