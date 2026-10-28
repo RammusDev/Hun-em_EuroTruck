@@ -4,7 +4,6 @@ import {runMonitor} from './monitor-store.mjs';
 import {advanceCloud} from '../bridge/advance.mjs';
 import {verifyBackground} from './background-auth.mjs';
 import {runEventClock,eventSchedule} from '../bridge/event-runtime.mjs';
-import {footprintEvents} from './footprint-events';
 import {processSketchEvents} from './collection-events';
 
 export async function backgroundTick(req:Request){
@@ -51,7 +50,7 @@ export async function backgroundTick(req:Request){
   receipts[args.requestId]=receipt;p.backgroundTicks={receipts,lastReceipt:receipt};
   return receipt;
  },false,true,{skipCommit:(result:any)=>['duplicate','unchanged','stale'].includes(result.action)});
- // Only committed visits may notify AI. Failure cannot roll back or interrupt the world's event chain.
+ // Committed selections notify AI; committed completions release prepared art.
  waitUntil(committed().then(p=>processSketchEvents(p)).catch(()=>console.log('sketch-event-delivery-pending')));
  return result;
 }

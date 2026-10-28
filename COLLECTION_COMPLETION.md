@@ -1,5 +1,7 @@
 # 收藏圖片完成追蹤與汽水包裝參考
 
+目前圖片時序以[SKETCH_LIFECYCLE.md](SKETCH_LIFECYCLE.md)為準：已確定抽選預繪、成品私存，餐點吃完／汽水同瓶喝完才公開。下方117以前的完成／購買觸發敘述是歷史；來源邊界、租約、防重、成品讀回與有界重試繼續使用。completion的complete指已備好成品，publication另外區分private-ready與published；完成後公開尚未通過則顯示awaiting_release，不重畫。
+
 ## 2026-10-28 正式來源403備援
 
 今天Aranciata實際購買的照片準備在正式Worker回403，不能用昨天本機HTTP200當作雲端可用的驗收。新增原廠全球版330mL包裝PNG及已核對的官方候補，保留明確全球英文標籤／圖鑑代表用途。單輪最多3來源、總8秒、單請求6秒、固定主機清單、manual redirects、原本1MiB及圖片格式驗證；已核對SHA的來源若內容改變會回REFERENCE_SOURCE_CHANGED。

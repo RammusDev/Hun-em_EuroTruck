@@ -15,7 +15,7 @@ test('isolated D1/R2: pure reads, reviewed immutable original, 128px thumbnail, 
   const before=JSON.stringify(p);globalThis.__footprintsTest={DB,BUCKET,p};
   let code=await fs.readFile(new URL('../lib/footprints.ts',import.meta.url),'utf8');
   code=code.replace("import {env} from 'cloudflare:workers';",'const env=globalThis.__footprintsTest;').replace("import {committed} from './runtime';",'const committed=async()=>globalThis.__footprintsTest.p;');
-  for(const file of ['footprints.mjs','mcp-file.mjs','reference-preview.mjs'])code=code.replace(`'../bridge/${file}'`,JSON.stringify(new URL('../bridge/'+file,import.meta.url).href));
+  for(const file of ['footprints.mjs','mcp-file.mjs','reference-preview.mjs','sketch-lifecycle.mjs','collection-artifacts.mjs'])code=code.replace(`'../bridge/${file}'`,JSON.stringify(new URL('../bridge/'+file,import.meta.url).href));
   const js=ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
   const api=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
   const row=footprintInventory(p)[0];await api.footprintRead(new URL('https://isolated.test/api/footprints'));

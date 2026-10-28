@@ -1,5 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
-import {mealReferenceCache,selectedMealReferences} from '../bridge/meal-reference-cache.mjs';
+import {mealReferenceCache} from '../bridge/meal-reference-cache.mjs';
+import {selectedSketches} from '../bridge/sketch-lifecycle.mjs';
+const selectedMealReferences=p=>selectedSketches(p,'meal');
 const id='a'.repeat(32),jpeg=Buffer.from([255,216,255,224,0,1]),png=Buffer.from([137,80,78,71,13,10,26,10,1]);
 const digest=b=>createHash('sha256').update(b).digest('hex');
 const key='reference-photos/meal-v2/'+id+'.json';

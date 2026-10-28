@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {collectionInventory} from './collections.mjs';
+import {drawingSketches} from './sketch-lifecycle.mjs';
 export const completionGraceMs=30*60000;
 export const collectionFailureCodes=['REFERENCE_UNAVAILABLE','PACKAGING_UNCONFIRMED','IMAGE_GENERATION_FAILED','IMAGE_VALIDATION_FAILED','IMAGE_SAVE_FAILED'];
 export function collectionCompletionService({db,kind,now=Date.now,reference=async()=>({ready:true,errors:[]})}){
@@ -8,14 +8,14 @@ export function collectionCompletionService({db,kind,now=Date.now,reference=asyn
  const get=async id=>{const r=await db.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(id).first();return r?JSON.parse(r.value):null;};
  const eligible=async(p,activeOnly=false)=>{
   const subs=await all('collection-event-sub:'+kind+':');
-  return collectionInventory(p,kind,Math.min(now(),p.world.now)).filter(r=>r.sketchEligible&&subs.some(s=>s.enabled&&(!activeOnly||s.expiresAt>now())&&s.worldId===p.world.publicationWorldId&&r.occurrences.some(o=>o.time>=s.createdAt)));
+  return (await drawingSketches(db,p,kind,now())).filter(r=>r.selectionRecorded&&r.sketchEligible&&subs.some(s=>s.enabled&&(!activeOnly||s.expiresAt>now())&&s.worldId===p.world.publicationWorldId&&r.selectedAt>=s.createdAt));
  };
  async function state(p){
   const [rows,receipts,images,claims]=await Promise.all([eligible(p),all(prefix),all('collection:'+kind+':'),all('collection-claim:'+kind+':')]);
   const saved=new Map(images.map(r=>[r.key.split(':')[2],r])),out=[];
   for(const row of rows){
    const events=receipts.filter(e=>e.collectionId===row.id),event=events.sort((a,b)=>(b.at||0)-(a.at||0))[0],claim=claims.find(c=>c.key.endsWith(':'+row.id)),drawing=!!claim?.lease&&claim.lease_until>now();
-   if(saved.has(row.id)){out.push({id:row.id,name:row.name,state:'complete',verification:saved.get(row.id).verifiedAt?'verified-at-save':'legacy-image-record'});continue;}
+   if(saved.has(row.id)){const image=saved.get(row.id),privateReady=image.sketchVersion===2&&!Number.isFinite(image.publishedAt);out.push({id:row.id,name:row.name,state:privateReady&&row.activityCompleted?'awaiting_release':'complete',publication:privateReady?'private-ready':'published',activityCompleted:row.activityCompleted,overdue:privateReady&&row.activityCompleted,verification:image.verifiedAt?'verified-at-save':'legacy-image-record'});continue;}
    const ref=await reference(row),failure=await get(failureKey(row.id)),dueAt=event?.completionDueAt||((event?.at||row.firstSeenAt)+completionGraceMs),exhausted=event?.status==='stopped'||(event?.automaticRetries||0)>=3&&now()>=dueAt;
    out.push({id:row.id,name:row.name,state:drawing?'drawing':!ref.ready?'reference_blocked':exhausted?'attention_required':event?.status==='sent'?'awaiting_image':'awaiting_notification',deliveryState:event?.status||'not_sent',automaticRetries:event?.automaticRetries||0,nextCheckAt:drawing?claim.lease_until:!ref.ready||exhausted?null:dueAt,overdue:event?.status==='stopped'||now()>=dueAt,lastError:!ref.ready?(ref.errors?.[0]||'REFERENCE_UNAVAILABLE'):event?.status==='stopped'?'NOTIFICATION_DELIVERY_STOPPED':failure?.code||((event?.status==='sent'&&now()>=dueAt)?'IMAGE_COMPLETION_NOT_REPORTED':null),failureAt:failure?.at||null});
   }
@@ -38,7 +38,7 @@ export function collectionCompletionService({db,kind,now=Date.now,reference=asyn
   return {requeued};
  }
  async function failure(p,id,code){
-  if(!collectionFailureCodes.includes(code)||!collectionInventory(p,kind,Math.min(now(),p.world.now)).some(r=>r.id===id&&r.sketchEligible))throw Error('INVALID_COLLECTION_FAILURE');
+  if(!collectionFailureCodes.includes(code)||!(await drawingSketches(db,p,kind,now())).some(r=>r.id===id&&r.sketchEligible))throw Error('INVALID_COLLECTION_FAILURE');
   if(await get('collection:'+kind+':'+id))return {kind,id,state:'complete',worldModified:false};
   const record={kind,id,code,at:now()};await db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,revision=revision+1,updated_at=excluded.updated_at').bind(failureKey(id),JSON.stringify(record),now()).run();
   return {...record,state:'pending',worldModified:false};

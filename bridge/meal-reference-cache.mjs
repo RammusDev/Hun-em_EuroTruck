@@ -1,20 +1,10 @@
 import {createHash} from 'node:crypto';
-import {collectionInventory} from './collections.mjs';
 import {collectionReference,referenceMime} from './collection-reference.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const ttl=7*86400000;
 const defaultLookupVersion='meal-reference-v3-official-arancini';
 // Never expose arbitrary upstream exception text, URLs or response bodies.
 const safeErrors=errors=>[...new Set((Array.isArray(errors)?errors:[]).map(e=>/^REFERENCE_[A-Z0-9_]{1,80}$/.test(e)?e:/timeout|abort/i.test(String(e))?'REFERENCE_TIMEOUT':'REFERENCE_FETCH_FAILED'))].slice(0,8);
-// Only selected meals in the committed plan, never all research candidates.
-export function selectedMealReferences(p){
- const events=[...(p.world.events||[])];
- for(const step of p.eventPlan?.steps||[])for(const [path,put,value] of step.patch||[]){
-  if(put&&path[0]==='events'){if(path.length===1&&Array.isArray(value))events.push(...value);else if(path.length===2&&value?.type)events.push(value);}
- }
- const selected=events.filter(e=>e.type==='expense'&&e.category==='meal'&&e.food?.localDish&&e.time>=p.world.now-86400000).map(e=>({...e,type:'meal_finished',mealId:e.id,meal:e.food.meal,location:e.food.cityId||e.food.location}));
- return collectionInventory({...p,world:{...p.world,events:selected,publicationJobs:[]}},'meal',Infinity).sort((a,b)=>a.firstSeenAt-b.firstSeenAt);
-}
 const boundedLookup=row=>{const deadline=AbortSignal.timeout(8000);return collectionReference(row,{fetcher:(url,init)=>fetch(url,{...init,signal:AbortSignal.any([deadline,init.signal].filter(Boolean))})});};
 export function mealReferenceCache({bucket,lookup=boundedLookup,now=Date.now,kind='meal',lookupVersion=defaultLookupVersion}){
  if(!['meal','soda'].includes(kind))throw Error('INVALID_COLLECTION_KIND');
