@@ -7,7 +7,6 @@ import {Miniflare} from 'miniflare';
 import png from 'pngjs';
 import jpeg from 'jpeg-js';
 import {footprintInventory} from '../bridge/footprints.mjs';
-import {cacheSketchReference} from '../bridge/sketch-reference.mjs';
 test('isolated D1/R2: pure reads, reviewed immutable original, 128px thumbnail, authorization visibility and idempotency',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("isolated")}}',compatibilityDate:'2026-05-15',d1Databases:{DB:'footprint-test'},r2Buckets:{BUCKET:'footprint-test'},host:'127.0.0.1',port:0});
  try{
@@ -29,8 +28,6 @@ test('isolated D1/R2: pure reads, reviewed immutable original, 128px thumbnail, 
   await assert.rejects(()=>api.saveFootprint(row.id,image,review),/CLAIM_REQUIRED/);
   await assert.rejects(()=>api.saveFootprint(row.id,image,review,'wrong-lease'),/CLAIM_REQUIRED/);
   await DB.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('sketch-selection:footprint:'+row.id,JSON.stringify({...row,worldId:'isolated',selectedAt:Date.now(),selectionToken:'1'}),Date.now()).run();
-  await assert.rejects(()=>api.saveFootprint(row.id,image,review,claimed.lease),/REFERENCE_HANDOFF_REQUIRED/);
-  await cacheSketchReference({db:DB,bucket:BUCKET,p,kind:'footprint',id:row.id,lease:claimed.lease,bytes:image,source:{sourcePage:'https://example.org/fixture',sourceImage:'https://example.org/fixture.png',credit:'Isolated fixture',license:'Test only',visuallyMatched:true}});
   const saved=await api.saveFootprint(row.id,image,review,claimed.lease);assert.equal(saved.worldModified,false);assert.equal((await api.claimFootprint(row.id)).action,'already-drawn');
   assert.deepEqual(Buffer.from(await (await api.footprintObject(saved.src.slice(1))).arrayBuffer()),image);
   const thumb=await api.footprintObject(saved.thumbnail.slice(1)),decoded=jpeg.decode(Buffer.from(await thumb.arrayBuffer()));assert.equal(decoded.width,128);assert.equal(decoded.height,128);

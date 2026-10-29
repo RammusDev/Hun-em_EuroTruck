@@ -7,9 +7,11 @@
 status=sent只代表通知HTTP受理。completion的complete代表已備好成品；publication另列private-ready或published。完成仍缺圖沿原抽選工作等待／重試；完成已有圖但讀回／發布失敗為awaiting_release，只重試公開，不重畫。
 缺圖狀態包含drawing、reference_blocked、awaiting_image、awaiting_notification、attention_required；未收到模型回報不能臆測原因。新收圖必須讀回原PNG核SHA及JPEG縮圖才保存verifiedAt；舊圖明列legacy-image-record，不冒稱重新驗證。
 
+reference_blocked僅在任務明確回報REFERENCE_UNAVAILABLE或PACKAGING_UNCONFIRMED時成立；網站快取為空或舊下載器403不代表原生參考不可用，不能據此判失敗。成品保存不要求網站留有參考照片。
+
 ## 有界重試
 
-既有背景事件及30分鐘健康檢查沿同一已記錄抽選檢查通知／缺圖，餐點、汽水及景點均適用。受理後寬限依自動次數為30／60／120／240分鐘；有效20分鐘作畫租約或已有圖時不重送。缺參考時原生任務仍可取得及保存照片，不再只等雲端下載器。最多3次自動重送，傳輸失敗沿同一穩定ID退避，原工作payload／watermark保留，每輪最多2通知；超上限需介入，不無限喚起或補送歷史。
+既有背景事件及30分鐘健康檢查沿同一已記錄抽選檢查通知／缺圖，餐點、汽水及景點均適用。受理後寬限依自動次數為30／60／120／240分鐘；有效20分鐘作畫租約或已有圖時不重送。原生任務取得可靠參考圖後直接作畫，不等待網站下載／存參考或回讀。最多3次自動重送，傳輸失敗沿同一穩定ID退避，原工作payload／watermark保留，每輪最多2通知；超上限需介入，不無限喚起或補送歷史。
 
 hunem_record_collection_failure只接受REFERENCE_UNAVAILABLE、PACKAGING_UNCONFIRMED、IMAGE_GENERATION_FAILED、IMAGE_VALIDATION_FAILED、IMAGE_SAVE_FAILED。保存失敗保留原圖供同圖重試，不接受任意上游文字或來源網址。
 

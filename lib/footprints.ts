@@ -73,8 +73,6 @@ export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:str
   return {...JSON.parse(saved.value),reused:true};
  }
  const claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind('footprint-claim:'+id).first<any>();
- const reference=await footprintReferenceCache({bucket:bucket()}).read(id);
- if(row.selectionRecorded&&!reference.photos.length)throw Error('REFERENCE_HANDOFF_REQUIRED');
  if((claim||lease)&&(!claim||claim.lease!==lease||claim.lease_until<Date.now()))throw Error('FOOTPRINT_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.landmarkRecognizable!==true||!review.originalGeneratedPath)throw Error('FOOTPRINT_REVIEW_REQUIRED');
  if(receipt.width!==receipt.height)throw Error('SQUARE_PNG_REQUIRED');

@@ -1,5 +1,4 @@
 import test from 'node:test';
-import {mealReferenceCache} from '../bridge/meal-reference-cache.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import ts from 'typescript';
@@ -55,8 +54,7 @@ test('real D1/R2: selection notifies once, art stages privately, completion alon
   const claims=[await collections.claimCollection('meal',queues[0].items[0].id),await collections.claimCollection('soda',queues[1].items[0].id),await footprints.claimFootprint(queues[2].items[0].id)];
   const rgba=Buffer.alloc(128*128*4,255);rgba[3]=0;const bytes=png.PNG.sync.write({width:128,height:128,data:rgba});
   const review={tool:'image_gen.imagegen',actuallyCalled:true,subjectRecognizable:true,landmarkRecognizable:true,originalGeneratedPath:'synthetic-test-fixture-only'};
-  const prepareFixture=async(kind,id)=>mealReferenceCache({bucket:BUCKET,kind,lookup:async()=>({photos:[{bytes,mimeType:'image/png',title:'Synthetic test reference',sourcePage:'https://example.org/fixture',sourceImage:'https://example.org/fixture.png',credit:'Test fixture',license:'Test only'}],errors:[]})}).prepare({id,name:'Synthetic reference'});
-  for(const [i,kind] of ['meal','soda','footprint'].entries())await prepareFixture(kind,claims[i].id);
+  for(const [i,kind] of ['meal','soda','footprint'].entries())assert.equal(await BUCKET.get(`reference-photos/${kind==='meal'?'meal-v2':kind+'-v1'}/${claims[i].id}.json`),null,'direct native reference use must not require a saved photo');
   const saved=[await collections.saveCollection('meal',claims[0].id,claims[0].lease,bytes,review),await collections.saveCollection('soda',claims[1].id,claims[1].lease,bytes,review),await footprints.saveFootprint(claims[2].id,bytes,review,claims[2].lease)];
   for(const image of saved)assert.equal(image.publishedAt,null);
   assert.equal((await services[0].status(p)).selections[0].state,'private_ready');
@@ -83,7 +81,6 @@ test('real D1/R2: selection notifies once, art stages privately, completion alon
   // Late drawing completion follows the same publication gate, without a second trigger.
   const late=payload(at);late.world.publicationWorldId='late';globalThis.__sketchLifecycle.p=late;
   await registerSketchSelections(DB,late);const lateId=(await collections.collectionQueue('meal')).items[0].id,lateClaim=await collections.claimCollection('meal',lateId);
-  await prepareFixture('meal',lateId);
   late.world.events=[...fixtures(at),{type:'meal_finished',mealId:'meal-one',time:at+120000,food:dish}];late.world.now=at+120000;late.eventPlan.steps=[];
   const lateImage=await collections.saveCollection('meal',lateId,lateClaim.lease,bytes,review);assert.ok(Number.isFinite(lateImage.publishedAt));assert.ok(await collections.collectionObject(lateImage.src.slice(1)));
   const retry=payload(at);retry.world.publicationWorldId='retry';globalThis.__sketchLifecycle.p=retry;

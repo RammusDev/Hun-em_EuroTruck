@@ -6,8 +6,8 @@
 
 1. 優先讀 data.kind 與 data.collectionId；kind 固定 meal，payload 明示其他 kind 就停止回報。先 hunem_collection_queue(kind="meal",id=collectionId) 純讀工作與快取參考。觸發文字缺 ID 時，讀 hunem_collection_event_status 的 meal 最新 sent 收據及 hunem_collection_queue(kind="meal")：只有收據 collectionId 與唯一候選 id 相同，且可用名稱／recordedAt 對得上已記錄抽選，才恢復 ID。不要要求先吃完；多筆、不符或無法核對就回報識別不足，不猜歷史項目，不批次補畫。
 
-2. 參考照片交接規則（2026-10-28修正）：抽選後立即處理，不要求活動先完成。先讀該ID的queue；未領取才claim，已有有效lease直接沿用，僅action=generate繼續；busy／already-drawn安靜結束。取得20分鐘lease後先目視queue的原生參考圖片。有合格快取就沿用，不重新下載。沒有快取（含雲端403）時，不因準備器失敗直接結束：使用原生搜尋／瀏覽器取得並目視這個確切主體的可靠實物照片，將照片原始PNG／JPEG／WebP（最多1MiB，超限可另找合格小圖；不可改造包裝）用hunem_cache_sketch_reference(kind,id,lease,file,source={sourcePage,sourceImage,credit,license,visuallyMatched:true})原生file保存。只有實際目視一致才填true。工具若已有照片會保留既有圖；保存後重新讀該ID queue，使用返回的原生照片生圖。公開照片下載可用一般下載工具，但不能以HTTP／CLI代替本站原生認證、claim、存參考或收圖。找不到可靠參考才保留待繪並回報明確錯誤。不用參考照片冒充成品，不在完成時另畫。
-料理須符合確切菜名，不能任意加配料，不冒稱照片是當次餐點或店家；可用可靠料理來源與Commons照片。
+2. 直接參考作畫（2026-10-29）：選定項目後先claim，僅action=generate繼續；已有有效lease沿用，不重複claim。取得且實際目視的原生參考圖片直接交內建imagegen，沒有本機路徑用num_last_images_to_include，已有本機路徑才用referenced_image_paths，兩者不可同時提供。不要求先下載成檔、不要求把參考存回網站，不呼叫cache工具或重讀queue作為生圖／收圖的前置條件。已有合格快取可直接使用；沒有快取或雲端403則使用原生搜尋／瀏覽器取得可靠實物圖片並直接作畫。只有確實找不到可靠參考才回報REFERENCE_UNAVAILABLE，不以快取是否為空判斷失敗。料理符合菜名且不臆造配料；景點符合實際現況，不重建已拆建築；汽水符合已核對品牌／口味／圖鑑包裝，不用相似產品替代。參考快取只作可選維修備援，不阻擋或延遲作畫。成品才用原生receive工具保存，失敗沿用同一生成原圖重送；活動完成後才公開。
+
 
 3. 沿用上一步取得的lease，不重複claim。使用內建 image_gen.imagegen，快速鉛筆淡水彩、正方形透明 PNG；依實物選自然視角，不編造配料，不需角色。若有角色須全黑貓、黃色圍巾。
 

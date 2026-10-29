@@ -1,6 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import ts from 'typescript';import {Miniflare} from 'miniflare';import png from 'pngjs';import jpeg from 'jpeg-js';
 import {createHash} from 'node:crypto';import {sodaReferenceCatalog} from '../bridge/soda-reference.mjs';
-import {mealReferenceCache} from '../bridge/meal-reference-cache.mjs';
 test('isolated D1/R2 collections: pure reads, scoped claim, reviewed alpha PNG, original/thumbnail persistence, byte idempotency and immutable repeats',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("test")}}',compatibilityDate:'2026-05-15',d1Databases:{DB:'collection-test'},r2Buckets:{BUCKET:'collection-test'},host:'127.0.0.1',port:0});
  try{
@@ -15,8 +14,6 @@ test('isolated D1/R2 collections: pure reads, scoped claim, reviewed alpha PNG, 
   const opaque=png.PNG.sync.write({width:128,height:128,data:Buffer.alloc(128*128*4,255)}),rgba=Buffer.alloc(128*128*4,255);rgba[3]=0;const bytes=png.PNG.sync.write({width:128,height:128,data:rgba}),review={tool:'image_gen.imagegen',actuallyCalled:true,subjectRecognizable:true,originalGeneratedPath:'isolated-fixture-only'};
   await assert.rejects(()=>api.saveCollection('soda',id,'wrong',bytes,review),/CLAIM_REQUIRED/);await assert.rejects(()=>api.saveCollection('soda',id,c.lease,bytes,{}),/REVIEW_REQUIRED/);await assert.rejects(()=>api.saveCollection('soda',id,c.lease,opaque,review),/TRANSPARENT_SUBJECT/);
   const row=read.items[0];await DB.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('sketch-selection:soda:'+id,JSON.stringify({...row,worldId:'test',selectedAt:Date.now(),selectionToken:'purchase'}),Date.now()).run();
-  await assert.rejects(()=>api.saveCollection('soda',id,c.lease,bytes,review),/REFERENCE_HANDOFF_REQUIRED/);
-  await mealReferenceCache({bucket:BUCKET,kind:'soda',lookup:async()=>({photos:[{bytes,mimeType:'image/png',title:'isolated fixture',sourcePage:'https://example.org/fixture',sourceImage:'https://example.org/fixture.png',credit:'Test',license:'Test only'}],errors:[]})}).prepare({id,name:'Orange soda'});
   globalThis.__collectionTest.BUCKET={get:k=>k.endsWith('.png')?null:BUCKET.get(k),put:(...args)=>BUCKET.put(...args)};
   await assert.rejects(()=>api.saveCollection('soda',id,c.lease,bytes,review),/ARTIFACT_READBACK_REQUIRED/);
   assert.equal(await DB.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('collection:soda:'+id).first(),null,'failed artifact readback cannot mark drawing complete');

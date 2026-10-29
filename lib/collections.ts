@@ -94,8 +94,6 @@ export async function saveCollection(kind:string,id:string,lease:string,bytes:Bu
   const saved=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('collection:'+kind+':'+id).first<any>();
   return {kind,id,...JSON.parse(saved.value),reused:true,worldModified:false};
  }
- const reference=await (kind==='meal'?mealReferenceCache({bucket:bucket()}):sodaReferenceCache({bucket:bucket()})).read(id);
- if(row.selectionRecorded&&!reference.photos.length)throw Error('REFERENCE_HANDOFF_REQUIRED');
  const claimKey='collection-claim:'+kind+':'+id,claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind(claimKey).first<any>();
  if(typeof lease!=='string'||!claim||claim.lease!==lease||claim.lease_until<Date.now())throw Error('COLLECTION_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.subjectRecognizable!==true||!review.originalGeneratedPath)throw Error('COLLECTION_REVIEW_REQUIRED');
