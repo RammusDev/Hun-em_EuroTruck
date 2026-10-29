@@ -6,13 +6,15 @@ import bundledFiles from '../bridge/static-files.json';
 import {browserState} from '../bridge/browser-state.mjs';
 import {syncRuntimeSettings} from '../bridge/runtime-settings.mjs';
 import {runEventClock,notifyEventTimer} from '../bridge/event-runtime.mjs';
+import {createSnapshotTextCache} from '../bridge/snapshot-cache.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const root='/hunem/data',json=(x:any)=>JSON.stringify(x);
 export const binaryHash=(x:any)=>createHash('sha256').update(x).digest('hex');
 const hash=(x:any)=>binaryHash(Buffer.isBuffer(x)||typeof x==='string'?x:json(x));
 let queue:Promise<any>=Promise.resolve();
 export class Conflict extends Error {status=409;}
-export async function committed(){for(let i=0;i<3;i++){const row=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('world').first<any>();if(!row)throw new Conflict('世界尚未匯入');const body=await bucket().get(JSON.parse(row.value).key);if(body)return body.json<any>();}throw new Conflict('世界版本切換中，請稍後重試');}
+const readSnapshotText=createSnapshotTextCache();
+export async function committed(){for(let i=0;i<3;i++){const row=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('world').first<any>();if(!row)throw new Conflict('世界尚未匯入');const key=JSON.parse(row.value).key,text=await readSnapshotText(key,async()=>{const body=await bucket().get(key);return body?body.text():null;});if(text!==null)return JSON.parse(text);}throw new Conflict('世界版本切換中，請稍後重試');}
 export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=advance,options:{skipCommit?:(result:any)=>boolean}={}){
  const run=async()=>{
   const lease=crypto.randomUUID(),now=Date.now(),row=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING *').bind(lease,now+180000,'world',now).first<any>();

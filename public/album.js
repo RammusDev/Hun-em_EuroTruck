@@ -8,7 +8,7 @@
   for(let i=0;i<per;i++){
    const index=page*per+i,art=photos[index],sheet=document.createElement('div');sheet.className='album-page '+(i?'right-page':'left-page');
    if(art){const figure=document.createElement('figure'),mount=document.createElement('div'),img=document.createElement('img'),caption=document.createElement('figcaption'),title=document.createElement('p'),date=document.createElement('p');
-    mount.className='album-mount';img.src=art.src;img.alt=art.alt;img.width=1254;img.height=1254;img.draggable=false;mount.append(img);title.className='album-caption';title.textContent=`${art.country}－${art.city}－${art.name}`;
+    mount.className='album-mount';img.src=window.HunemDialogPaging?.source(art.src)||art.src;img.decoding='async';img.alt=art.alt;img.width=1254;img.height=1254;img.draggable=false;const link=document.createElement('a');link.href=art.src;link.target='_blank';link.rel='noopener';link.setAttribute('aria-label','開啟'+art.name+'原圖');link.append(img);mount.append(link);title.className='album-caption';title.textContent=`${art.country}－${art.city}－${art.name}`;
     date.className='album-date';const time=art.drawnAt?new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(art.drawnAt):art.drawnOn.replaceAll('-',' / ');date.textContent=time;caption.append(title,date);figure.append(mount,caption);sheet.append(figure);
    }else{const end=document.createElement('p');end.className='album-last';end.textContent='下一幅，留給下一段路。';sheet.append(end);}
    const folio=document.createElement('span');folio.className='album-folio';folio.textContent=String(index+1).padStart(2,'0');sheet.append(folio);spread.append(sheet);
@@ -21,8 +21,7 @@
  const turn=async direction=>{
   if(turning||closing||(direction<0?prev.disabled:next.disabled))return;turning=true;
   const oldSpread=spread.cloneNode(true);oldSpread.removeAttribute('id');oldSpread.classList.add('album-outgoing');oldSpread.setAttribute('aria-hidden','true');oldSpread.inert=true;prev.disabled=next.disabled=true;book.setAttribute('aria-busy','true');
-  const target=page+direction,targets=photos.slice(target*perPage(),target*perPage()+perPage());
-  await Promise.all(targets.map(art=>new Promise(resolve=>{const image=new Image();image.onload=image.onerror=resolve;image.src=art.src;})));
+  const target=page+direction;
   page=target;draw();dialog.querySelector('.album-desk').scrollTop=0;prev.disabled=next.disabled=true;
   book.append(oldSpread);
   const ms=matchMedia('(prefers-reduced-motion:reduce)').matches?1:440;

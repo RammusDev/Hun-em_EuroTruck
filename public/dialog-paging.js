@@ -1,4 +1,5 @@
 (()=>{
- async function prepare(nodes){const images=nodes.flatMap(node=>[...node.querySelectorAll('img')]);await Promise.all(images.map(async image=>{image.loading='eager';if(!image.decode)return;let timer;try{await Promise.race([image.decode().catch(()=>{}),new Promise(resolve=>{timer=setTimeout(resolve,2500);})]);}finally{clearTimeout(timer);}}));}
- window.HunemDialogPaging={prepare};
+ function source(src){return /^\/(?:generated|illustrations|collections|footprints)\/.+\.png$/.test(src)?src+'?view=book':src;}
+ function prepare(nodes){for(const node of nodes)for(const image of node.querySelectorAll('img')){image.loading='eager';image.decoding='async';}}
+ window.HunemDialogPaging={prepare,source};
 })();

@@ -10,15 +10,24 @@ class Element{
  setAttribute(k,v){this.attributes[k]=v;}removeAttribute(k){delete this.attributes[k];}
  addEventListener(k,v){this.listeners[k]=v;}showModal(){this.open=true;}close(){this.open=false;this.listeners.close?.();}focus(){this.focused=true;}
 }
-function setup(mobile=false){
+function setup(mobile=false,paging=null){
  const ids=Object.fromEntries(['collections-dialog','collections-list','collections-status','collections-prev','collections-next','collections-title','collections-note','open-meals','open-sodas','close-collections','sodas-held','meals-total','sodas-total'].map(id=>[id,new Element()]));
- const requests=[],window={};let now=100000;
+ const requests=[],window=paging?{HunemDialogPaging:paging}:{};let now=100000;
  vm.runInNewContext(script,{matchMedia:()=>({matches:mobile,addEventListener(){}}),document:{body:{classList:{add(){},remove(){}}},getElementById:id=>ids[id],createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text})},window,Intl,URL,URLSearchParams,AbortController,Date:class extends Date{static now(){return now;}},fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve:data=>resolve({ok:true,json:async()=>data}),reject}))});
  return{ids,window,requests,advance:()=>{now+=60001;},open:kind=>ids['open-'+kind].onclick({currentTarget:ids['open-'+kind]})};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const data=items=>({items,total:items.length,totalOccurrences:items.reduce((n,row)=>n+row.count,0),hasMore:false});
 const row=(extra={})=>({name:'日常午餐',localDish:false,count:1,occurrences:[{time:1792832400000,meal:'lunch',location:'城市'}],...extra});
+
+test('cards render before slow image decoding; rapid reopen reuses records and later reopen refreshes',async()=>{
+ const x=setup(false,{source:src=>src+'?view=book',prepare:()=>new Promise(()=>{})});
+ x.open('meals');x.requests[0].resolve(data([row({image:{src:'/original.png',width:1254,height:1254}})]));await tick();
+ const card=x.ids['collections-list'].children[0],link=card.children.find(e=>e.tagName==='a');
+ assert.equal(link.href,'/original.png');assert.equal(link.children[0].src,'/original.png?view=book');
+ x.ids['close-collections'].onclick();x.open('meals');assert.equal(x.requests.length,1);assert.equal(x.ids['collections-list'].children.length,1);
+ x.ids['close-collections'].onclick();x.advance();x.open('meals');assert.equal(x.requests.length,2);
+});
 test('summary is throttled and held bottle updates independently',async()=>{
  const x=setup();x.window.HunemCollections.refresh();x.window.HunemCollections.refresh();assert.equal(x.requests.length,1);
  x.requests[0].resolve({meal:{total:3,totalOccurrences:4},soda:{total:2,totalOccurrences:6}});await tick();
