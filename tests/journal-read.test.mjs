@@ -27,4 +27,10 @@ test('actual MCP route rejects non-owner before snapshot; journal read calls onl
  const req=owner=>new Request('https://test.site/mcp',{method:'POST',headers:{'test-owner':owner?'yes':'no','oai-authenticated-user-id':'owner'},body:JSON.stringify(message({day:'2026-10-31'}))});
  assert.equal((await route.POST(req(false))).status,403);assert.equal(reads,0);
  const response=await route.POST(req(true)),r=await response.json();assert.equal(response.status,200);assert.equal(JSON.parse(r.result.content[0].text).zh,'正文');assert.equal(reads,1);assert.deepEqual(p,before);
+ p.world.publicationJobs=[{day:'2026-10-31',status:'published',id:'test',input:{}}];
+ Object.assign(globalThis.__journalTest,{writingPacket:()=>({events:[],learningPlan:{}}),publicationMetrics:()=>({}),binaryHash:()=>''});
+ // Import again so callback bindings include the packet helpers.
+ const js2=ts.transpileModule(source+'\n// compatibility-test',{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText,route2=await import('data:text/javascript;base64,'+Buffer.from(js2).toString('base64'));
+ const packetReq=new Request('https://test.site/mcp',{method:'POST',headers:{'test-owner':'yes','oai-authenticated-user-id':'owner'},body:JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'hunem_read_writing_packet',arguments:{day:'2026-10-31',includePacket:true}}})});
+ const packetResponse=await(await route2.POST(packetReq)).json(),content=JSON.parse(packetResponse.result.content[0].text);assert.equal(content.journal.zh,'正文');assert.equal(content.journal.mutated,false);
 });
