@@ -8,7 +8,7 @@ test('meal/soda isolated D1 subscriptions: historical watermark, real completion
   const db=await mf.getD1Database('DB'),bucket=await mf.getR2Bucket('BUCKET');await db.prepare('CREATE TABLE hunem_runtime(id TEXT PRIMARY KEY,value TEXT,revision INTEGER,updated_at INTEGER,lease TEXT,lease_until INTEGER)').run();
   let now=1792800000000,fail=false;const sent=[];
   const fetcher=async(url,o)=>{const body=JSON.parse(o.body);if(body.type==='verification')return Response.json({challenge:body.challenge});sent.push({url,body});return new Response(null,{status:fail?503:202});};
-  const service=kind=>collectionEventService({db,bucket,kind,now:()=>now,fetcher}),args=kind=>({name:collectionEventNames[kind],delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/'+kind,secret},arguments:{},ttlMs:3600000});
+  const service=kind=>collectionEventService({db,bucket,kind,now:()=>now,fetcher,siteOrigin:'https://configured-site.example'}),args=kind=>({name:collectionEventNames[kind],delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/'+kind,secret},arguments:{},ttlMs:3600000});
   await assert.rejects(()=>service('soda').rpc('events/subscribe',args('soda'),'','w'),/OWNER_REQUIRED/);
   for(const kind of ['meal','soda'])await service(kind).rpc('events/subscribe',args(kind),'owner','w');
   const meal=(id,time,local=true)=>({type:'meal_finished',mealId:id,time,day:'day',meal:'lunch',food:{name:id,localDish:local,source:'https://example.org/food',cityId:'a'}}),soda=(id,time)=>({type:'expense',category:'soda',id,time,day:'day',soda:{id,name:id}});
@@ -17,6 +17,7 @@ test('meal/soda isolated D1 subscriptions: historical watermark, real completion
   fail=true;await Promise.all([service('meal').process(p),service('soda').process(p)]);assert.equal(sent.length,2);assert.ok(!sent.some(s=>s.body.data.name==='If you'));assert.equal((await service('meal').status()).retrying,1);assert.equal((await service('soda').status()).retrying,1);
   await service('soda').process(p);assert.equal(sent.length,2);now+=3*60000;fail=false;await Promise.all([service('soda').process(p),service('soda').process(p)]);await service('meal').process(p);assert.equal(sent.length,4);assert.equal(sent[0].body.eventId,sent.find((s,i)=>i>1&&s.body.name===sent[0].body.name).body.eventId);assert.equal(JSON.stringify(p),before);
   const delivered=sent.find(s=>s.body.name===collectionEventNames.soda);assert.equal(delivered.body.data.kind,'soda');assert.equal(delivered.body.data.recordedAt,p.world.now);assert.equal(delivered.url,'https://chatgpt.com/mcp-events/soda');
+  assert.ok(sent.every(s=>s.body.data.url==='https://configured-site.example/journey'));
   const id=delivered.body.data.collectionId,requestId='11111111-1111-4111-8111-111111111111';await Promise.all([service('soda').replay(p,id,requestId),service('soda').replay(p,id,requestId)]);assert.equal(sent.length,5);assert.notEqual(sent[4].body.eventId,delivered.body.eventId);assert.deepEqual(sent[4].body.data,delivered.body.data);
   await service('soda').replay(p,id,requestId);assert.equal(sent.length,5);
   await db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('collection:soda:'+id,'{}',now).run();assert.equal((await service('soda').replay(p,id,requestId)).action,'already-drawn');

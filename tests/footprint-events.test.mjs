@@ -15,7 +15,7 @@ test('real isolated D1: subscription verification, stable replay IDs, committed 
   const db=await mf.getD1Database('DB'),bucket=await mf.getR2Bucket('BUCKET');await db.prepare('CREATE TABLE hunem_runtime(id TEXT PRIMARY KEY,value TEXT,revision INTEGER,updated_at INTEGER,lease TEXT,lease_until INTEGER)').run();
   let now=1792800000000,mode='ok',sent=[],verifications=0;
   const fetcher=async(url,options)=>{const body=JSON.parse(options.body);assert.equal(options.redirect,'manual');if(body.type==='verification'){verifications++;return Response.json({challenge:mode==='bad'?'wrong':body.challenge});}sent.push({body,headers:options.headers});return new Response(null,{status:mode==='failure'?503:mode==='gone'?410:202});};
-  const service=()=>footprintEventService({db,bucket,now:()=>now,fetcher});
+  const service=()=>footprintEventService({db,bucket,now:()=>now,fetcher,siteOrigin:'https://configured-site.example'});
   const args={name:visitEvent,arguments:{},delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/isolated-test',secret},ttlMs:3600000};
   await assert.rejects(()=>service().rpc('events/subscribe',args,'','w'),/OWNER_REQUIRED/);
   mode='bad';await assert.rejects(()=>service().rpc('events/subscribe',args,'owner','w'),/VERIFICATION_FAILED/);assert.equal((await service().status()).activeSubscriptions,0);
@@ -23,6 +23,7 @@ test('real isolated D1: subscription verification, stable replay IDs, committed 
   const event=(id,time=now-1000)=>({type:'visit',time,place:{topicId:id,name:id,p:[9,54]}}),p={world:{publicationWorldId:'w',now,events:[event('one'),event('two'),event('future',now+60000),{...event('generic'),place:{generic:true}}]}};
   p.eventPlan={createdAt:now,steps:[{patch:[[['events'],1,[event('one',now+600000),event('two',now+600000),{...event('generic',now+600000),place:{generic:true}}]]]}]};
   const before=JSON.stringify(p);mode='failure';await service().process(p);assert.equal(sent.length,2);assert.equal((await service().status()).retrying,2);
+  assert.ok(sent.every(s=>s.body.data.url==='https://configured-site.example/journey'));
   await service().process(p);assert.equal(sent.length,2,'retry must respect nextAt');now+=3*60000;mode='ok';
   await Promise.all([service().process(p),service().process(p)]);assert.equal(sent.length,4,'concurrent retries send each event once');assert.equal(sent[0].body.eventId,sent[2].body.eventId);assert.equal((await service().status()).delivered,2);assert.equal(JSON.stringify(p),before);
   const serialized=JSON.stringify(await service().status());assert.ok(!serialized.includes(secret)&&!serialized.includes('https://chatgpt.com'));

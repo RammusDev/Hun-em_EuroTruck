@@ -2,6 +2,7 @@ import {createHash,createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
 import {drawingSketches,registerSketchSelections,sketchSelectionState} from './sketch-lifecycle.mjs';
 import {collectionCompletionService,completionGraceMs} from './collection-completion.mjs';
 import {footprintReferenceCache} from './footprint-reference.mjs';
+import {journeyUrl} from './site-links.mjs';
 // Stable transport identifier; it now notifies only a committed selection.
 export const visitEvent='hunem.landmark_visited';
 const hash=x=>createHash('sha256').update(x).digest('hex');
@@ -21,7 +22,7 @@ export function signedHeaders(secret,id,body,now=Date.now(),subscriptionId=''){
  return {'Content-Type':'application/json','webhook-id':id,'webhook-timestamp':timestamp,'webhook-signature':'v1,'+signature,'X-MCP-Subscription-Id':subscriptionId};
 }
 const eventDefinition={name:visitEvent,description:'A named landmark has been selected in the committed itinerary. Draw it privately now using the footprint tools. Only a real completed visit releases the saved image. Image saves never create visits or journal work.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},footprintId:{type:'string'},name:{type:'string'},visitedAt:{type:'number',description:'Legacy transport field: planned visit timestamp for this selection, not proof of completion.'},url:{type:'string'}},required:['worldId','footprintId','name','visitedAt','url'],additionalProperties:false}};
-export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now}){
+export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,siteOrigin=undefined}){
  const completion=collectionCompletionService({db,kind:'footprint',now,reference:async row=>{const r=await footprintReferenceCache({bucket,now}).read(row.id);return {ready:r.photos.length>0,errors:r.errors};}});
  const get=async id=>{const r=await db.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(id).first();return r?JSON.parse(r.value):null;};
  const put=async(id,value)=>db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,revision=revision+1,updated_at=excluded.updated_at').bind(id,JSON.stringify(value),now()).run();
@@ -92,7 +93,7 @@ export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now}){
    try{
     const saved=JSON.parse(locked.value);if(saved.status==='sent'||saved.status==='stopped'||saved.nextAt>now())continue;
     attempted++;const eventId=saved.generation?baseId+'_r'+saved.generation:baseId;
-    const body=JSON.stringify({eventId,name:visitEvent,timestamp:new Date(row.selectedAt).toISOString(),data:{worldId:payload.world.publicationWorldId,footprintId:row.id,name:row.name,visitedAt:row.firstSeenAt,url:'https://hun-em-europe.honeygrass8.chatgpt.site/journey'},cursor:null});
+    const body=JSON.stringify({eventId,name:visitEvent,timestamp:new Date(row.selectedAt).toISOString(),data:{worldId:payload.world.publicationWorldId,footprintId:row.id,name:row.name,visitedAt:row.firstSeenAt,url:journeyUrl(siteOrigin)},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,eventId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,eventId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
     await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),footprintId:row.id,...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});

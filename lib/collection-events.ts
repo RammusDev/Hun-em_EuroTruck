@@ -8,7 +8,7 @@ import {committed} from './runtime';
 import {publishCompletedSketches,drawingSketches} from '../bridge/sketch-lifecycle.mjs';
 export const collectionEvents=(kind:string)=>{
  const reference=async(row:any)=>{const r=await(kind==='meal'?mealReferenceCache({bucket:env.BUCKET}):sodaReferenceCache({bucket:env.BUCKET})).read(row.id);return {ready:r.photos.length>0,errors:r.errors};};
- const service=collectionEventService({db:env.DB,bucket:env.BUCKET,kind,ready:async(row:any)=>(await reference(row)).ready,reference});
+ const service=collectionEventService({db:env.DB,bucket:env.BUCKET,kind,ready:async(row:any)=>(await reference(row)).ready,reference,siteOrigin:(env as any).BACKGROUND_TICK_ORIGIN});
  return {...service,status:async(p?:any)=>service.status(p||await committed())};
 };
 export async function processSketchEvents(p:any){
