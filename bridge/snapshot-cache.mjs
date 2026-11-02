@@ -4,9 +4,10 @@ export function createSnapshotTextCache({maxChars=4*1024*1024}={}){
  const entries=new Map();
  return async function read(key,load){
   if(entries.has(key))return entries.get(key);
-  const pending=Promise.resolve().then(load);entries.set(key,pending);
-  while(entries.size>2)entries.delete(entries.keys().next().value);
-  try{const text=await pending;if((text===null||text.length>maxChars)&&entries.get(key)===pending)entries.delete(key);return text;}
-  catch(error){if(entries.get(key)===pending)entries.delete(key);throw error;}
+  // Only completed immutable text is reusable across requests. An in-flight
+  // promise can belong to a canceled request and never settle in this isolate.
+  const text=await load();
+  if(text!==null&&text.length<=maxChars){entries.set(key,text);while(entries.size>2)entries.delete(entries.keys().next().value);}
+  return text;
  };
 }

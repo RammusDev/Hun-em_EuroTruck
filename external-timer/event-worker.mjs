@@ -1,9 +1,10 @@
 import {signBackground} from '../lib/background-auth.mjs';
 const maxBody=65536;
+export const siteRequestTimeoutMs=60000,recoveryAlarmDelayMs=120000;
 async function receipt(response){if(!response.ok)throw Error('SITE_HTTP_'+response.status);const bytes=await response.text();if(bytes.length>maxBody)throw Error('RECEIPT_TOO_LARGE');return JSON.parse(bytes);}
 export class EventClock {
  constructor(ctx,env){this.ctx=ctx;this.env=env;}
- async call(options){return receipt(await fetch(await signBackground(this.env.TICK_ENDPOINT,this.env.TICK_SECRET,this.env.TICK_WORLD_ID,options),{signal:AbortSignal.timeout(25000),redirect:'manual'}));}
+ async call(options){return receipt(await fetch(await signBackground(this.env.TICK_ENDPOINT,this.env.TICK_SECRET,this.env.TICK_WORLD_ID,options),{signal:AbortSignal.timeout(siteRequestTimeoutMs),redirect:'manual'}));}
  async saveSchedule(reply,state){
   if(reply.worldId!==this.env.TICK_WORLD_ID||reply.architecture!=='events-v1'||!Number.isSafeInteger(reply.version)||!Array.isArray(reply.events))throw Error('INVALID_SCHEDULE');
   if(reply.version<(state.version||0))throw Error('OLDER_SCHEDULE');
@@ -31,7 +32,7 @@ export class EventClock {
   }
   // Persist delivery identity and a recovery alarm BEFORE contacting Sites.
   state.pending=due;state.requestId??=crypto.randomUUID();
-  await this.ctx.storage.transaction(async tx=>{await tx.put('schedule',state);await tx.setAlarm(now+60000);});
+  await this.ctx.storage.transaction(async tx=>{await tx.put('schedule',state);await tx.setAlarm(now+recoveryAlarmDelayMs);});
   try{
    const reply=await this.call({requestId:state.requestId,event:{id:due.id,version:due.version}});
    await this.saveSchedule(reply,state);

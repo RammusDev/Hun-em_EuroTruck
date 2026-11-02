@@ -48,13 +48,19 @@ test('all image routes recheck reader and public visibility before serving cache
  }
  delete globalThis.__readerImageTest;
 });
-test('snapshot text cache deduplicates same revision but never shares mutable worlds or hides a new pointer',async()=>{
+test('snapshot text cache reuses completed revisions but never shares mutable worlds or in-flight work',async()=>{
  const read=createSnapshotTextCache();let calls=0;
  const load=async()=>{calls++;return '{"world":{"now":1}}';};
- const [a,b]=await Promise.all([read('revision1',load),read('revision1',load)]);assert.equal(calls,1);
+ const [a,b]=await Promise.all([read('revision1',load),read('revision1',load)]);assert.equal(calls,2);await read('revision1',load);assert.equal(calls,2);
  const mutated=JSON.parse(a);mutated.world.now=999;assert.equal(JSON.parse(b).world.now,1);
  assert.equal(JSON.parse(await read('revision2',async()=>'{"world":{"now":2}}')).world.now,2);
  let failures=0;await assert.rejects(()=>read('retry',()=>{failures++;throw Error('storage');}),/storage/);
  await read('retry',()=>{failures++;return '{}';});assert.equal(failures,2);
  const small=createSnapshotTextCache({maxChars:1});calls=0;await small('large',load);await small('large',load);assert.equal(calls,2);
+});
+test('a canceled snapshot load cannot block the next request for the same revision',async()=>{
+ const read=createSnapshotTextCache();let finish;
+ const abandoned=read('revision',()=>new Promise(resolve=>{finish=resolve;}));
+ assert.equal(await read('revision',async()=>'{}'),'{}');
+ finish('{}');await abandoned;
 });

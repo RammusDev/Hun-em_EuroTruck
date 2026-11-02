@@ -1,29 +1,34 @@
 import {createEventTrace} from '../bridge/event-trace.mjs';
-import {env} from 'cloudflare:workers';
+import {env,waitUntil} from 'cloudflare:workers';
 import {createHash} from 'node:crypto';
 import * as core from './core.mjs';
 import {advanceCloud} from '../bridge/advance.mjs';
 import bundledFiles from '../bridge/static-files.json';
 import {browserState} from '../bridge/browser-state.mjs';
 import {syncRuntimeSettings} from '../bridge/runtime-settings.mjs';
-import {runEventClock,notifyEventTimer} from '../bridge/event-runtime.mjs';
+import {runEventClock,notifyEventTimer,rebuildEventPlan} from '../bridge/event-runtime.mjs';
 import {createSnapshotTextCache} from '../bridge/snapshot-cache.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const root='/hunem/data',json=(x:any)=>JSON.stringify(x);
 export const binaryHash=(x:any)=>createHash('sha256').update(x).digest('hex');
 const hash=(x:any)=>binaryHash(Buffer.isBuffer(x)||typeof x==='string'?x:json(x));
-let queue:Promise<any>=Promise.resolve();
 export class Conflict extends Error {status=409;}
 const readSnapshotText=createSnapshotTextCache();
 export async function committed(){for(let i=0;i<3;i++){const row=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('world').first<any>();if(!row)throw new Conflict('世界尚未匯入');const key=JSON.parse(row.value).key,text=await readSnapshotText(key,async()=>{const body=await bucket().get(key);return body?body.text():null;});if(text!==null)return JSON.parse(text);}throw new Conflict('世界版本切換中，請稍後重試');}
 export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=advance,options:{skipCommit?:(result:any)=>boolean,trace?:any}={}){
- const trace=options.trace||createEventTrace('world-transaction');trace.mark('queue','start');
- const run=async()=>{trace.mark('queue','complete');
+ const trace=options.trace||createEventTrace('world-transaction');trace.mark('transaction','start');
+ const run=async()=>{
   const lease=crypto.randomUUID(),now=Date.now(),row=await trace.span('lease',()=>db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING *').bind(lease,now+180000,'world',now).first<any>());
   if(!row)throw new Conflict('世界正在同步，請稍後重試');
+  let didCommit=false;
   try{
    const body=await trace.span('snapshot-read',()=>bucket().get(JSON.parse(row.value).key));if(!body)throw Error('世界快照遺失，禁止建立新世界');
-   const p=await trace.span('snapshot-decode',()=>body.json());trace.mark('hydrate-settings','start');core.hydrate(p.files||{});const appliedSettings=syncRuntimeSettings(core,p);trace.mark('hydrate-settings','complete');
+   const p=await trace.span('snapshot-decode',()=>body.json());
+   // A delayed snapshot read must not hydrate shared engine state after its
+   // lease has expired and another request has acquired the world.
+   const owned=await trace.span('lease-check',()=>db().prepare('SELECT lease FROM hunem_runtime WHERE id=? AND lease=? AND lease_until>=?').bind('world',lease,Date.now()).first());
+   if(!owned)throw new Conflict('世界交易鎖已過期，未開始運算');
+   trace.mark('hydrate-settings','start');core.hydrate(p.files||{});const appliedSettings=syncRuntimeSettings(core,p);trace.mark('hydrate-settings','complete');
    process.env.GOOGLE_MAPS_API_KEY=String((env as any).GOOGLE_MAPS_API_KEY||'');process.env.GOOGLE_MAPS_BROWSER_KEY=String((env as any).GOOGLE_MAPS_BROWSER_KEY||'');
    if(advance){
     if(p.eventPlan?.events?.some((e:any)=>e.dueAt<now-10*60000)){
@@ -44,20 +49,30 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
    const beforeResult=p.eventArchitecture?hash(p.world):null;
    const result=await trace.span('operation',()=>fn(p));if(!commit||options.skipCommit?.(result))return result;
    if(p.maintenance){p.maintenance.applied??={};for(const [kind,digest] of Object.entries(appliedSettings))if(p.maintenance.applied[kind]?.hash!==digest)p.maintenance.applied[kind]={hash:digest,at:now};}
-   if(beforeResult&&hash(p.world)!==beforeResult&&advance)p.eventPlan=await trace.span('rebuild-plan',()=>core.buildEventPlan(p));
+   if(beforeResult&&hash(p.world)!==beforeResult&&advance)await trace.span('rebuild-plan',()=>rebuildEventPlan(p,core));
    Object.assign(p.files,core.changes());
    for(const key of Object.keys(p.files))if(key.endsWith('.tmp'))delete p.files[key];
    trace.mark('encode-snapshot','start');const revision=row.revision+1,key=`snapshots/${String(revision).padStart(10,'0')}-${lease}.json`,bytes=json(p);
    trace.mark('encode-snapshot','complete',{snapshotBytes:Buffer.byteLength(bytes)});await trace.span('snapshot-write',()=>bucket().put(key,bytes,{httpMetadata:{contentType:'application/json'}}));
    const updated=await trace.span('snapshot-cas',()=>db().prepare('UPDATE hunem_runtime SET value=?,revision=?,updated_at=?,lease=NULL,lease_until=NULL WHERE id=? AND revision=? AND lease=? AND lease_until>=?').bind(json({key,sha256:hash(bytes)}),revision,Date.now(),'world',row.revision,lease,Date.now()).run());
    if(updated.meta.changes!==1)throw new Conflict('世界交易鎖已過期，未提交');
-   trace.mark('committed','complete');if(p.eventArchitecture&&advance){try{await trace.span('notify-timer',()=>notifyEventTimer((env as any).EVENT_TIMER_CONTROL_URL,(env as any).BACKGROUND_TICK_SECRET));}catch{console.log('event-timer-notification-pending-health-reconciliation');}}
-   const previous=JSON.parse(row.value).key;if(previous.startsWith('snapshots/')&&!previous.startsWith('snapshots/import-'))await trace.span('delete-previous',()=>bucket().delete(previous));
-   trace.mark('hourly-backup','start');if(Math.floor(now/3600000)!==Math.floor(row.updated_at/3600000)){await bucket().put('backups/'+new Date(now).toISOString().slice(0,13)+'.json',bytes);const list=await bucket().list({prefix:'backups/'});for(const item of list.objects)if(!item.key.startsWith('backups/manual-')&&item.uploaded.getTime()<now-7*86400000)await bucket().delete(item.key);}
-   trace.mark('hourly-backup','complete');trace.mark('transaction-return','complete');return result;
-  }finally{await trace.span('release-lease',()=>db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind('world',lease).run());}
+   didCommit=true;trace.mark('committed','complete');
+   // CAS already released the lease. The durable receipt must not wait for
+   // notification, obsolete-object deletion or hourly backup maintenance.
+   const notify=!!(p.eventArchitecture&&advance),previous=JSON.parse(row.value).key;
+   const backupBytes=Math.floor(now/3600000)!==Math.floor(row.updated_at/3600000)?bytes:null;
+   const defer=(stage:string,work:()=>Promise<any>)=>waitUntil(trace.span(stage,work).catch(()=>trace.mark(stage,'deferred-failure')));
+   // Independent tasks: a stalled deletion must not block a backup or timer
+   // notification. Do not retain the entire world in a maintenance closure.
+   if(notify)defer('notify-timer',()=>notifyEventTimer((env as any).EVENT_TIMER_CONTROL_URL,(env as any).BACKGROUND_TICK_SECRET));
+   if(previous.startsWith('snapshots/')&&!previous.startsWith('snapshots/import-'))defer('delete-previous',()=>bucket().delete(previous));
+   if(backupBytes!==null)defer('hourly-backup',async()=>{await bucket().put('backups/'+new Date(now).toISOString().slice(0,13)+'.json',backupBytes);const list=await bucket().list({prefix:'backups/'});for(const item of list.objects)if(!item.key.startsWith('backups/manual-')&&item.uploaded.getTime()<now-7*86400000)await bucket().delete(item.key);});
+   trace.mark('transaction-return','complete');return result;
+  }finally{if(!didCommit)await trace.span('release-lease',()=>db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind('world',lease).run());}
  };
- const next=queue.then(run);queue=next.catch(()=>{});return next;
+ // D1's bounded lease and CAS serialize writers across every isolate. Never
+ // retain an in-flight request Promise that cancellation can leave unresolved.
+ return run();
 }
 export async function seed(p:any){
  if(p?.world?.version!==1||p.world.speed!==1||!p.files?.['/hunem/assets/language-learning.json'])throw Error('匯入資料不完整或非真實時間世界');

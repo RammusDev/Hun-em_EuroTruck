@@ -1,13 +1,14 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import ts from 'typescript';import {Miniflare} from 'miniflare';
 import {settingsView,settingText,hashText} from '../lib/maintenance.mjs';
+async function bounded(work){let timer;try{return await Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('request blocked behind canceled work or cleanup')),5000);})]);}finally{clearTimeout(timer);}}
 test('real D1/R2 transaction: version restore, competing saves, failed snapshot and pure GET',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("isolated")}}',compatibilityDate:'2026-05-15',d1Databases:['DB'],r2Buckets:['BUCKET'],host:'127.0.0.1',port:0});
  try{
   const DB=await mf.getD1Database('DB'),BUCKET=await mf.getR2Bucket('BUCKET');await DB.prepare('CREATE TABLE hunem_runtime(id TEXT PRIMARY KEY,value TEXT,revision INTEGER,updated_at INTEGER,lease TEXT,lease_until INTEGER)').run();
   const now=Date.now(),p={files:{},eventArchitecture:true,world:{publicationWorldId:'isolated',now,realAt:now,diaries:[{day:'2026-10-26',zh:'unchanged'}]},eventPlan:{version:8,until:now+3600000,events:[{id:'same-event',dueAt:now+3600000}],steps:[]}};
   await BUCKET.put('snapshots/import-test.json',JSON.stringify(p));await DB.prepare('INSERT INTO hunem_runtime VALUES(?,?,?,?,NULL,NULL)').bind('world',JSON.stringify({key:'snapshots/import-test.json'}),0,now).run();
-  globalThis.__maintenanceStorage={DB,BUCKET};
-  let code=await fs.readFile(new URL('../lib/runtime.ts',import.meta.url),'utf8');code=code.replace("import {env} from 'cloudflare:workers';",'const env=globalThis.__maintenanceStorage;').replace("import bundledFiles from '../bridge/static-files.json';","import bundledFiles from '../bridge/static-files.json' with {type:'json'};");
+  const background=[];globalThis.__maintenanceStorage={DB,BUCKET,background};
+  let code=await fs.readFile(new URL('../lib/runtime.ts',import.meta.url),'utf8');code=code.replace("import {env,waitUntil} from 'cloudflare:workers';",'const env=globalThis.__maintenanceStorage,waitUntil=task=>env.background.push(task);').replace("import bundledFiles from '../bridge/static-files.json';","import bundledFiles from '../bridge/static-files.json' with {type:'json'};");
   for(const name of ['./core.mjs','../bridge/advance.mjs','../bridge/static-files.json','../bridge/browser-state.mjs','../bridge/runtime-settings.mjs','../bridge/event-runtime.mjs','../bridge/event-trace.mjs','../bridge/snapshot-cache.mjs'])code=code.replace(`'${name}'`,JSON.stringify(new URL(name,new URL('../lib/runtime.ts',import.meta.url)).href));
   const runtime=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText).toString('base64'));
   globalThis.__maintenanceStorage.runtime=runtime;
@@ -22,5 +23,30 @@ test('real D1/R2 transaction: version restore, competing saves, failed snapshot 
   assert.equal((await post({op:'restore',kind:'travel',hash:saved.beforeHash,expectedHash:saved.hash,reason:'回復原設定'})).status,200);const restored=await runtime.committed();assert.equal(restored.maintenance.history.length,2);assert.equal(JSON.parse(settingText(restored,'travel')).touring.visitMinutes,60);assert.deepEqual(restored.world,p.world);assert.deepEqual(restored.eventPlan,p.eventPlan);
   const put=BUCKET.put.bind(BUCKET);globalThis.__maintenanceStorage.BUCKET={get:BUCKET.get.bind(BUCKET),delete:BUCKET.delete.bind(BUCKET),list:BUCKET.list.bind(BUCKET),put:(key,...args)=>key.startsWith('snapshots/')?Promise.reject(Error('snapshot failure')):put(key,...args)};
   const beforeFail=await row();assert.equal((await post({...body,expectedHash:hashText(settingText(restored,'travel'))})).status,400);assert.equal((await row()).revision,beforeFail.revision);assert.equal((await row()).lease,null);assert.deepEqual((await runtime.committed()).maintenance,restored.maintenance);
- }finally{delete globalThis.__maintenanceStorage;await mf.dispose();}
+  // A lost response must not wait on obsolete-object cleanup, and the next
+  // transaction must still acquire D1 and commit in the same module instance.
+  globalThis.__maintenanceStorage.BUCKET=BUCKET;
+  let unblockDelete;const stalledDelete=new Promise(resolve=>{unblockDelete=resolve;});
+  globalThis.__maintenanceStorage.BUCKET={get:BUCKET.get.bind(BUCKET),put:BUCKET.put.bind(BUCKET),list:BUCKET.list.bind(BUCKET),delete:async()=>stalledDelete};
+  const beforeCleanup=await row();
+  try{
+   assert.deepEqual(await bounded(runtime.transaction(async p=>{p.world.marker='first';return {saved:true};},false,true)),{saved:true});
+   assert.equal((await row()).lease,null);
+   assert.deepEqual(await bounded(runtime.transaction(async p=>{p.world.marker='second';return {saved:true};},false,true)),{saved:true});
+   assert.equal((await row()).revision,beforeCleanup.revision+2);assert.equal((await runtime.committed()).world.marker,'second');
+  }finally{unblockDelete();await Promise.allSettled(background);}
+
+  // Model an abandoned request stalled before hydration. Expiring its D1 lease
+  // lets a new request proceed; resuming the old read must fail before mutation.
+  let resumeRead,startedRead;const reading=new Promise(resolve=>{startedRead=resolve;});let blockOnce=true;
+  globalThis.__maintenanceStorage.BUCKET={get:async key=>{if(blockOnce){blockOnce=false;const body=await BUCKET.get(key);startedRead();await new Promise(resolve=>{resumeRead=resolve;});return body;}return BUCKET.get(key);},put:BUCKET.put.bind(BUCKET),list:BUCKET.list.bind(BUCKET),delete:BUCKET.delete.bind(BUCKET)};
+  let abandonedRan=false;
+  const abandoned=runtime.transaction(async()=>{abandonedRan=true;return {};},false,true).then(()=>null,error=>error);
+  await reading;await DB.prepare('UPDATE hunem_runtime SET lease_until=? WHERE id=?').bind(Date.now()-1,'world').run();
+  let deadline;try{
+   const saved=await Promise.race([runtime.transaction(async p=>{p.world.marker='recovered';return {saved:true};},false,true),new Promise((_,reject)=>{deadline=setTimeout(()=>reject(Error('request was blocked behind abandoned promise')),3000);})]);
+   assert.deepEqual(saved,{saved:true});
+  }finally{clearTimeout(deadline);resumeRead();}
+  assert.equal((await abandoned).status,409);assert.equal(abandonedRan,false);assert.equal((await runtime.committed()).world.marker,'recovered');
+ }finally{await Promise.allSettled(globalThis.__maintenanceStorage?.background||[]);delete globalThis.__maintenanceStorage;await mf.dispose();}
 });
