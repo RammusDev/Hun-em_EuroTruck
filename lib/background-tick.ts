@@ -1,3 +1,4 @@
+import {createEventTrace} from '../bridge/event-trace.mjs';
 import {env,waitUntil} from 'cloudflare:workers';
 import {transaction,engine,committed,stateView} from './runtime';
 import {runMonitor} from './monitor-store.mjs';
@@ -7,7 +8,7 @@ import {runEventClock,eventSchedule} from '../bridge/event-runtime.mjs';
 import {processSketchEvents} from './collection-events';
 
 export async function backgroundTick(req:Request){
- const now=Date.now(),args=await verifyBackground(req,env,now);
+ const trace=createEventTrace('background-tick');const now=Date.now(),args=await verifyBackground(req,env,now);
  if(args.health){const p=await committed();try{await runMonitor(p,stateView(p),env);}catch{console.log('monitor-check-failed');}waitUntil(processSketchEvents(p));return {worldId:args.worldId,action:'health',now:p.world.now,...eventSchedule(p)};}
  // The receipt and updated world are committed by the same existing D1 CAS.
  // A failed computation/commit cannot consume a request ID permanently.
@@ -31,7 +32,7 @@ export async function backgroundTick(req:Request){
     const bucket=env.BUCKET as R2Bucket,key='backups/manual-before-event-recovery-'+engine.realDay(now)+'.json';
     if(!(await bucket.get(key)))await bucket.put(key,JSON.stringify(p));
    }
-   const schedule=await runEventClock(p,engine,{real:now,prepare:!args.event||due?.kind==='prepare',beforeShoreChange:async(p:any)=>{const bucket=env.BUCKET as R2Bucket,key='backups/manual-before-ferry-city-'+p.world.job.start+'.json';if(!(await bucket.get(key)))await bucket.put(key,JSON.stringify(p));}});
+   const schedule=await runEventClock(p,engine,{real:now,trace,prepare:!args.event||due?.kind==='prepare',beforeShoreChange:async(p:any)=>{const bucket=env.BUCKET as R2Bucket,key='backups/manual-before-ferry-city-'+p.world.job.start+'.json';if(!(await bucket.get(key)))await bucket.put(key,JSON.stringify(p));}});
    if(args.event)p.eventReceipts[args.event.id]={at:now,version:args.event.version};
    const keys=Object.keys(p.eventReceipts);for(const key of keys.slice(0,Math.max(0,keys.length-2048)))delete p.eventReceipts[key];
    Object.assign(p.files,engine.changes());
@@ -49,8 +50,8 @@ export async function backgroundTick(req:Request){
   const receipt={worldId:args.worldId,action:'advanced',acceptedAt:now,now:p.world.now,lagMs:Math.max(0,now-p.world.realAt),elapsedMs:Date.now()-started};
   receipts[args.requestId]=receipt;p.backgroundTicks={receipts,lastReceipt:receipt};
   return receipt;
- },false,true,{skipCommit:(result:any)=>['duplicate','unchanged','stale'].includes(result.action)});
+ },false,true,{trace,skipCommit:(result:any)=>['duplicate','unchanged','stale'].includes(result.action)});
  // Committed selections notify AI; committed completions release prepared art.
- waitUntil(committed().then(p=>processSketchEvents(p)).catch(()=>console.log('sketch-event-delivery-pending')));
+ waitUntil(trace.span('sketch-notifications',()=>committed().then(p=>processSketchEvents(p))).catch(()=>console.log('sketch-event-delivery-pending')));trace.mark('response-ready','complete');
  return result;
 }
