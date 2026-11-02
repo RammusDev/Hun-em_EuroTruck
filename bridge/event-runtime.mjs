@@ -9,31 +9,50 @@ export async function prepareEventResearch(p,core,real){
 }
 /** @param {any} p @param {any} core @param {{real?:number,prepare?:boolean,beforeShoreChange?:(p:any)=>Promise<void>}} [options] */
 export async function runEventClock(p,core,{real=Date.now(),prepare=false,beforeShoreChange}={}){
+ const started=Date.now();
+ const stage=async(name,work)=>{console.log(JSON.stringify({action:'event-stage',stage:name,state:'start',version:p.eventPlan?.version||0,elapsedMs:Date.now()-started}));const value=await work();console.log(JSON.stringify({action:'event-stage',stage:name,state:'complete',elapsedMs:Date.now()-started}));return value;};
+ let routed=false;
  const target=p.world.now+Math.max(0,real-p.world.realAt);
  if(p.eventPlan)core.settlePlan(p,real);
  // Catch up only due work; the preview tape itself never publishes or fetches.
  if(!p.eventPlan||target>=p.eventPlan.until){
-  if(p.world.now<target)await core.tick(p.world,Math.min(target,p.world.now+24*3600000),async job=>{
+  // Cross one unplanned minute only. Persist the resulting decision before any
+  // other I/O; overdue work resumes through the next saved plan/alarm.
+  if(p.world.now<target)await stage('settle-boundary',()=>core.tick(p.world,Math.min(target,(Math.floor(p.world.now/60000)+1)*60000),async job=>{
+   routed=true;
    const key=`${job.from}-${job.to}-${job.originPosition?.join(',')||'city'}-cloud-v2`;
-   if(p.routes[key]?.verified)return p.routes[key];const r=await core.getRoute(job);if(r.verified)p.routes[key]=r;return r;
-  },core.eventRandom(p.world));
+   if(p.routes[key]?.verified)return p.routes[key];const r=await stage('work-route',()=>core.getRoute(job));if(r.verified)p.routes[key]=r;return r;
+  },core.eventRandom(p.world)));
  }
  // Publication cutoffs are independent from whether any movement was due.
  core.reconcilePublications(p.world,'/hunem/data',real);core.syncTeaching(p.world.diaries);
  p.world.realAt=real-(target-p.world.now);
- const shore=await core.prepareFerryArrival?.(p.world.job,{now:real});
+ // A route lookup, shore preparation (up to two lookups), and topic research
+ // each have their own I/O budget. Never stack them in the same request.
+ const shore=routed?null:await stage('shore-preparation',()=>core.prepareFerryArrival?.(p.world.job,{now:real}));
  if(shore){if(shore.changedRoute)await beforeShoreChange?.(p);p.world.job=shore.job;}
- if(prepare||!p.eventResearch||p.eventResearch.routeFingerprint!==(p.world.job?.journey?.routeFingerprint||null))await prepareEventResearch(p,core,real);
+ const researchNeeded=prepare||!p.eventResearch||p.eventResearch.routeFingerprint!==(p.world.job?.journey?.routeFingerprint||null);
+ const preparationPending=!!(routed||shore);
+ if(researchNeeded&&!preparationPending){await stage('topic-research',()=>prepareEventResearch(p,core,real));delete p.eventPreparation;}
+ if(preparationPending)p.eventPreparation={dueAt:real+1000};
+ await stage('build-plan',()=>rebuildEventPlan(p,core,real));
+ return eventSchedule(p);
+}
+// Keep deferred preparation through other legitimate writes that rebuild a plan.
+export async function rebuildEventPlan(p,core,real=Date.now()){
  const oldVersion=p.eventPlan?.version||0;
- p.eventPlan=await core.buildEventPlan(p);
+ // Bound preview cost independently of accumulated lag. This is still a saved
+ // event horizon, with completion and 30-minute preparation alarms together.
+ p.eventPlan=await core.buildEventPlan(p,{maxMinutes:120});
  // A monotonically increasing version also invalidates late external deliveries.
  if(p.eventPlan.version<=oldVersion)throw Error('EVENT_PLAN_VERSION');
  const r=p.eventResearch;
+ if(p.eventPreparation){const dueAt=p.eventPreparation.dueAt;p.eventPlan.events.push({id:`${p.eventPlan.version}:preparation:${dueAt}`,version:p.eventPlan.version,kind:'prepare',dueAt,worldAt:dueAt-p.eventPlan.offset});}
  const shoreRetry=p.world.job?.journey?.shoreRetryAt;
  if(shoreRetry>real)p.eventPlan.events.push({id:`${p.eventPlan.version}:shore:${shoreRetry}`,version:p.eventPlan.version,kind:'prepare',dueAt:shoreRetry,worldAt:shoreRetry-p.eventPlan.offset});
  if(r?.retryAt>real&&r.retryAt<real+24*3600000)p.eventPlan.events.push({id:`${p.eventPlan.version}:research:${r.retryAt}`,version:p.eventPlan.version,kind:'prepare',dueAt:r.retryAt,worldAt:r.retryAt-p.eventPlan.offset});
  p.eventPlan.events.sort((a,b)=>a.dueAt-b.dueAt);
- return eventSchedule(p);
+ return p.eventPlan;
 }
 export function eventSchedule(p){return {architecture:'events-v1',version:p.eventPlan?.version||0,events:(p.eventPlan?.events||[]).filter(e=>e.dueAt>p.world.realAt).slice(0,96)};}
 export async function notifyEventTimer(endpoint,secret){

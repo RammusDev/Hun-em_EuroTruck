@@ -5,7 +5,7 @@ import {advanceCloud} from '../bridge/advance.mjs';
 import bundledFiles from '../bridge/static-files.json';
 import {browserState} from '../bridge/browser-state.mjs';
 import {syncRuntimeSettings} from '../bridge/runtime-settings.mjs';
-import {runEventClock,notifyEventTimer} from '../bridge/event-runtime.mjs';
+import {runEventClock,notifyEventTimer,rebuildEventPlan} from '../bridge/event-runtime.mjs';
 import {createSnapshotTextCache} from '../bridge/snapshot-cache.mjs';
 const db=()=>env.DB as D1Database,bucket=()=>env.BUCKET as R2Bucket;
 const root='/hunem/data',json=(x:any)=>JSON.stringify(x);
@@ -42,7 +42,7 @@ export async function transaction(fn:(p:any)=>Promise<any>,advance=true,commit=a
    const beforeResult=p.eventArchitecture?hash(p.world):null;
    const result=await fn(p);if(!commit||options.skipCommit?.(result))return result;
    if(p.maintenance){p.maintenance.applied??={};for(const [kind,digest] of Object.entries(appliedSettings))if(p.maintenance.applied[kind]?.hash!==digest)p.maintenance.applied[kind]={hash:digest,at:now};}
-   if(beforeResult&&hash(p.world)!==beforeResult&&advance)p.eventPlan=await core.buildEventPlan(p);
+   if(beforeResult&&hash(p.world)!==beforeResult&&advance)await rebuildEventPlan(p,core);
    Object.assign(p.files,core.changes());
    for(const key of Object.keys(p.files))if(key.endsWith('.tmp'))delete p.files[key];
    const revision=row.revision+1,key=`snapshots/${String(revision).padStart(10,'0')}-${lease}.json`,bytes=json(p);
