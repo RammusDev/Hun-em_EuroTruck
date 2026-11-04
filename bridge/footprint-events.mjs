@@ -1,3 +1,4 @@
+import {dispatchSketch} from './sketch-progress.mjs';
 import {createHash,createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
 import {drawingSketches,registerSketchSelections,sketchSelectionState} from './sketch-lifecycle.mjs';
 import {collectionCompletionService,completionGraceMs} from './collection-completion.mjs';
@@ -85,23 +86,27 @@ export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,site
    if(!Number.isFinite(row.selectedAt)||row.selectedAt<sub.createdAt)continue;
    if(attempted>=2)return {subscriptions:subscriptions.length,delivered};
    const baseId=eventKey(sub,row),key='footprint-event:'+baseId;
-   const old=await get(key);if(old&&(old.status==='sent'||old.status==='stopped'||old.nextAt>now()))continue;
+   const old=await get(key);if(old&&(old.status==='sent'||old.status==='stopped'||old.status==='suppressed'||old.nextAt>now()))continue;
    // Same event ID survives response loss and retries. A short D1 lease prevents concurrent deliveries.
    await db.prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(key,JSON.stringify({status:'pending',attempts:0,nextAt:0}),now()).run();
    const lease=randomUUID(),locked=await db.prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING value').bind(lease,now()+30000,key,now()).first();
    if(!locked)continue;
    try{
-    const saved=JSON.parse(locked.value);if(saved.status==='sent'||saved.status==='stopped'||saved.nextAt>now())continue;
+    const saved=JSON.parse(locked.value);if(saved.status==='sent'||saved.status==='stopped'||saved.status==='suppressed'||saved.nextAt>now())continue;
+    if(saved.automaticRetries>0&&!saved.replayRequests?.length){await put(key,{...saved,status:'suppressed',suppressionReason:'AUTOMATIC_REPLAY_DISABLED',at:now()});continue;}
+    const dispatched=await dispatchSketch({db,kind:'footprint',id:row.id,now:now(),manual:!!saved.replayRequests?.length,requestId:saved.replayRequests?.at(-1)?.id},async()=>{
     attempted++;const eventId=saved.generation?baseId+'_r'+saved.generation:baseId;
     const body=JSON.stringify({eventId,name:visitEvent,timestamp:new Date(row.selectedAt).toISOString(),data:{worldId:payload.world.publicationWorldId,footprintId:row.id,name:row.name,visitedAt:row.firstSeenAt,url:journeyUrl(siteOrigin)},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,eventId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,eventId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
     await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),footprintId:row.id,...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});
-    if(accepted)delivered++;
+    if(accepted)delivered++;return accepted;
+    });
+    if(dispatched===false)await put(key,{...saved,status:'suppressed',suppressionReason:'EXISTING_WORK',footprintId:row.id,at:now()});
    }finally{await db.prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(key,lease).run();}
   }
   return {subscriptions:subscriptions.length,delivered};
  }
  async function status(){const subs=await all('mcp-event-sub:'),events=await all('footprint-event:');return {activeSubscriptions:subs.filter(active).length,expiredSubscriptions:subs.filter(s=>s.enabled&&!active(s)).length,delivered:events.filter(e=>e.status==='sent').length,retrying:events.filter(e=>e.status==='pending').length,stopped:events.filter(e=>e.status==='stopped').length,latestDelivery:events.filter(e=>e.at).sort((a,b)=>b.at-a.at).slice(0,3).map(e=>({footprintId:e.footprintId,status:e.status,httpStatus:e.httpStatus,at:e.at,attempts:e.attempts}))};}
- return {rpc,process,status:async p=>({...await status(),...(p?{completion:await completion.state(p),selections:await sketchSelectionState(db,p,'footprint',now())}:{})}),replay};
+ return {rpc,process,status:async p=>({...await status(),...(p?{completion:await completion.state(p),selections:await sketchSelectionState(db,p,'footprint',now())}:{})}),replay,recordFailure:completion.failure};
 }

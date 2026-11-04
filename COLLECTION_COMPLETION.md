@@ -11,9 +11,13 @@ reference_blocked僅在任務明確回報REFERENCE_UNAVAILABLE或PACKAGING_UNCON
 
 ## 有界重試
 
-既有背景事件及30分鐘健康檢查沿同一已記錄抽選檢查通知／缺圖，餐點、汽水及景點均適用。受理後寬限依自動次數為30／60／120／240分鐘；有效20分鐘作畫租約或已有圖時不重送。原生任務取得可靠參考圖後直接作畫，不等待網站下載／存參考或回讀。最多3次自動重送，傳輸失敗沿同一穩定ID退避，原工作payload／watermark保留，每輪最多2通知；超上限需介入，不無限喚起或補送歷史。
+2026-11-04：三類均停止受理後因缺圖而自動重送。30分鐘健康檢查只觀察／告警及重試已備圖的公開，不因沉默、鎖到期或失敗碼再次喚起AI。傳輸尚未受理保留同一穩定ID、最多8次有限退避；送前以項目層鎖防並發，已有成品、已領取或其他訂閱已受理則抑制。已知失敗記錄待介入；人工指定重送沿既有requestId及每日上限，同一requestId跨訂閱只受理一次，作畫鎖有效時不投遞。舊pending自動重送亦抑制。原生任務直接使用可靠參考，不等待網站快取；世界、活動完成門檻及日記排程不變。
 
-hunem_record_collection_failure只接受REFERENCE_UNAVAILABLE、PACKAGING_UNCONFIRMED、IMAGE_GENERATION_FAILED、IMAGE_VALIDATION_FAILED、IMAGE_SAVE_FAILED。保存失敗保留原圖供同圖重試，不接受任意上游文字或來源網址。
+hunem_record_collection_failure支援meal、soda及footprint；只接受REFERENCE_UNAVAILABLE、PACKAGING_UNCONFIRMED、IMAGE_GENERATION_FAILED、IMAGE_VALIDATION_FAILED、IMAGE_SAVE_FAILED、RATE_LIMITED、TASK_INTERRUPTED、FILE_TRANSFER_FAILED、CLAIM_EXPIRED。不存任意上游文字或來源網址。保存失敗在同次任務沿用原圖；跨任務原圖取回未實作。
+
+bridge/sketch-progress.mjs在既有D1表保存領取、檔案接收／接收完成、保存與失敗觀測，最近12步及分階段累計。可選hunem_record_sketch_progress以有效lease回報reference_ready或image_generated；沒有回報則明示未知，不能以未回報判定未生成。收圖入口自動區分檔案傳入、驗證與儲存失敗。狀態GET純讀，已完成項目仍可讀回觀測；tokens與實際生成次數保留null，不由通知／工具次數推算。三類監控共用原通知設定。
+
+新景點與餐點／汽水相同，收圖要求有效20分鐘lease，保存D1時再次核對；PNG需方形、有可見主體及全透明像素，原圖／縮圖讀回核對後才登記。既有圖片不重寫。
 
 ## 參考修復與限制
 

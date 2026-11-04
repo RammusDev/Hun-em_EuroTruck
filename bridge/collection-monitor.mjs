@@ -1,6 +1,7 @@
 import {collectionEventService} from './collection-events.mjs';
 import {mealReferenceCache} from './meal-reference-cache.mjs';
 import {sodaReferenceCache} from './soda-reference.mjs';
+import {footprintEventService} from './footprint-events.mjs';
 export async function collectionMonitor(payload,{DB,BUCKET},{now=Date.now()}={}){
  if(!DB||!BUCKET||!await DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='hunem_runtime'").first())return null;
  const result={};for(const kind of ['meal','soda']){
@@ -8,5 +9,6 @@ export async function collectionMonitor(payload,{DB,BUCKET},{now=Date.now()}={})
   const reference=async row=>{const r=await cache.read(row.id);return {ready:r.photos.length>0,errors:r.errors};};
   result[kind]=await collectionEventService({db:DB,bucket:BUCKET,kind,now:()=>now,reference}).status(payload);
  }
+ result.footprint=await footprintEventService({db:DB,bucket:BUCKET,now:()=>now}).status(payload);
  return result;
 }

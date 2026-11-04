@@ -1,3 +1,4 @@
+import {dispatchSketch} from './sketch-progress.mjs';
 import {createHash,randomUUID,timingSafeEqual} from 'node:crypto';
 import {drawingSketches,registerSketchSelections,sketchSelectionState} from './sketch-lifecycle.mjs';
 import {callbackUrl,signingKey,signedHeaders} from './footprint-events.mjs';
@@ -50,16 +51,20 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
    // Missing cloud photos must still reach the native reference acquisition task.
    if(attempted>=2)return {subscriptions:subs.length,delivered};
    const eventId=kind+'_'+hash(sub.key+'\n'+row.id).slice(0,40),key=deliveryPrefix+eventId,old=await get(key);
-   if(old&&(old.status==='sent'||old.status==='stopped'||old.nextAt>now()))continue;
+   if(old&&(old.status==='sent'||old.status==='stopped'||old.status==='suppressed'||old.nextAt>now()))continue;
    await db.prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(key,JSON.stringify({status:'pending',attempts:0,nextAt:0,collectionId:row.id,recordedAt:occurrence.time}),now()).run();
    const lease=randomUUID(),locked=await db.prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING value').bind(lease,now()+30000,key,now()).first();if(!locked)continue;
    try{
-    const saved=JSON.parse(locked.value);if(['sent','stopped'].includes(saved.status)||saved.nextAt>now())continue;attempted++;
+    const saved=JSON.parse(locked.value);if(['sent','stopped','suppressed'].includes(saved.status)||saved.nextAt>now())continue;attempted++;
+    if(saved.automaticRetries>0&&!saved.replayRequests?.length){await put(key,{...saved,status:'suppressed',suppressionReason:'AUTOMATIC_REPLAY_DISABLED',at:now()});continue;}
+    const dispatched=await dispatchSketch({db,kind:kind,id:row.id,now:now(),manual:!!saved.replayRequests?.length,requestId:saved.replayRequests?.at(-1)?.id},async()=>{
     const deliveryId=saved.generation?eventId+'_r'+saved.generation:eventId,at=saved.recordedAt??occurrence.time;
     const body=JSON.stringify({eventId:deliveryId,name,timestamp:new Date(at).toISOString(),data:{worldId:payload.world.publicationWorldId,collectionId:row.id,kind,name:row.name,recordedAt:at,url:journeyUrl(siteOrigin)},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,deliveryId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,deliveryId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
-    await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});if(accepted)delivered++;
+    await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});if(accepted)delivered++;return accepted;
+    });
+    if(dispatched===false)await put(key,{...saved,status:'suppressed',suppressionReason:'EXISTING_WORK',collectionId:row.id,at:now()});
    }finally{await db.prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(key,lease).run();}
   }
   return {subscriptions:subs.length,delivered};

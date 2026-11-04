@@ -1,3 +1,4 @@
+import {recordSketchStep} from '../bridge/sketch-progress.mjs';
 import {env} from 'cloudflare:workers';
 import {committed} from './runtime';
 import {collectionInventory,collectionKinds} from '../bridge/collections.mjs';
@@ -82,7 +83,8 @@ export async function claimCollection(kind:string,id:string){
  valid(kind,id);const row=(await collectionRows(kind,undefined,true)).find((r:any)=>r.id===id);if(!row||!row.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');if(row.image)return {action:'already-drawn',kind,id};
  const key='collection-claim:'+kind+':'+id,now=Date.now(),lease=crypto.randomUUID();
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(key,'{}',now).run();
- const acquired=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,now+20*60000,key,now).first();
+ const acquired=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=?,value=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,now+20*60000,JSON.stringify({startedAt:now}),key,now).first();
+ if(acquired)await recordSketchStep(db(),kind,id,'claimed',{now});
  return acquired?{action:'generate',kind,id,lease,expiresAt:now+20*60000,item:row}:{action:'busy',kind,id};
 }
 export async function saveCollection(kind:string,id:string,lease:string,bytes:Buffer,review:any){
@@ -98,6 +100,7 @@ export async function saveCollection(kind:string,id:string,lease:string,bytes:Bu
  if(typeof lease!=='string'||!claim||claim.lease!==lease||claim.lease_until<Date.now())throw Error('COLLECTION_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.subjectRecognizable!==true||!review.originalGeneratedPath)throw Error('COLLECTION_REVIEW_REQUIRED');
  validateCollectionImage(bytes);
+ await recordSketchStep(db(),kind,id,'receiving',{bytes:bytes.length});
  const preview=makeReferencePreview(bytes,{version:'collection-128-v1',maxEdge:128,quality:78,maxBytes:24000}),base=`collections/${kind}/${id}/${receipt.sha256}`;
  const backupKey='backups/manual-before-meal-soda-collections-20261024.json';if(!(await bucket().get(backupKey)))await bucket().put(backupKey,JSON.stringify(await committed()),{httpMetadata:{contentType:'application/json'}});
  await bucket().put(base+'.png',bytes,{httpMetadata:{contentType:'image/png'}});await bucket().put(base+'.jpg',preview.bytes,{httpMetadata:{contentType:'image/jpeg'}});
@@ -106,6 +109,7 @@ export async function saveCollection(kind:string,id:string,lease:string,bytes:Bu
  image.verifiedAt=Date.now();
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) SELECT ?,?,0,? FROM hunem_runtime WHERE id=? AND lease=? AND lease_until>=?').bind(key,JSON.stringify(image),Date.now(),claimKey,lease,Date.now()).run();
  const record=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(key).first<any>();if(!record)throw Error('COLLECTION_CLAIM_REQUIRED');const saved=JSON.parse(record.value);if(saved.sha256!==receipt.sha256)throw Error('COLLECTION_ALREADY_DRAWN');
+ await recordSketchStep(db(),kind,id,'saved',{bytes:bytes.length});
  await (kind==='meal'?mealReferenceCache({bucket:bucket()}):sodaReferenceCache({bucket:bucket()})).finish(id,saved);
  await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(claimKey,lease).run();
  // A late save releases only against a real completion, using the same release path.

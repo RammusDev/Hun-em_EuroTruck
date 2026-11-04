@@ -1,3 +1,5 @@
+import {validateCollectionImage} from '../bridge/collection-image.mjs';
+import {recordSketchStep} from '../bridge/sketch-progress.mjs';
 import {env} from 'cloudflare:workers';
 import {committed} from './runtime';
 import {footprintInventory,mapFootprints} from '../bridge/footprints.mjs';
@@ -59,7 +61,8 @@ export async function claimFootprint(id:string){
  if(!isId(id))throw Error('INVALID_FOOTPRINT');const row=(await footprints(true)).find((r:any)=>r.id===id);if(!row)throw Error('VISIT_REQUIRED');if(row.image)return {action:'already-drawn',id};
  const key='footprint-claim:'+id,now=Date.now(),lease=crypto.randomUUID();
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(key,'{}',now).run();
- const result=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,now+20*60000,key,now).first();
+ const result=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=?,value=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,now+20*60000,JSON.stringify({startedAt:now}),key,now).first();
+ if(result)await recordSketchStep(db(),'footprint',id,'claimed',{now});
  return result?{action:'generate',id,lease,expiresAt:now+20*60000,item:row}:{action:'busy',id};
 }
 export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:string){
@@ -73,20 +76,23 @@ export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:str
   return {...JSON.parse(saved.value),reused:true};
  }
  const claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind('footprint-claim:'+id).first<any>();
- if((claim||lease)&&(!claim||claim.lease!==lease||claim.lease_until<Date.now()))throw Error('FOOTPRINT_CLAIM_REQUIRED');
+ if(!lease||!claim||claim.lease!==lease||claim.lease_until<=Date.now())throw Error('FOOTPRINT_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.landmarkRecognizable!==true||!review.originalGeneratedPath)throw Error('FOOTPRINT_REVIEW_REQUIRED');
- if(receipt.width!==receipt.height)throw Error('SQUARE_PNG_REQUIRED');
+ validateCollectionImage(bytes);
+ await recordSketchStep(db(),'footprint',id,'receiving',{bytes:bytes.length});
  const preview=makeReferencePreview(bytes,{version:'footprint-128-v1',maxEdge:128,quality:78,maxBytes:24000}),base=`footprints/${id}/${receipt.sha256}`,original=base+'.png',thumbnail=base+'.jpg';
  // Back up the authoritative world before first persistent footprint write; no world mutation.
  const backupKey='backups/manual-before-footprints-20261024.json';
  if(!(await bucket().get(backupKey)))await bucket().put(backupKey,JSON.stringify(await committed()),{httpMetadata:{contentType:'application/json'}});
  await bucket().put(original,bytes,{httpMetadata:{contentType:'image/png'}});
  await bucket().put(thumbnail,preview.bytes,{httpMetadata:{contentType:'image/jpeg'}});
- const image={src:'/'+original,thumbnail:'/'+thumbnail,sha256:receipt.sha256,drawnAt:Date.now(),width:receipt.width,height:receipt.height,review,sketchVersion:2,publishedAt:null};
+ const image={verifiedAt:Date.now(),src:'/'+original,thumbnail:'/'+thumbnail,sha256:receipt.sha256,drawnAt:Date.now(),width:receipt.width,height:receipt.height,review,sketchVersion:2,publishedAt:null};
  await verifyCollectionArtifacts(bucket(),image);
- await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind('footprint:'+id,JSON.stringify(image),Date.now()).run();
+ await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) SELECT ?,?,0,? FROM hunem_runtime WHERE id=? AND lease=? AND lease_until>?').bind('footprint:'+id,JSON.stringify(image),Date.now(),'footprint-claim:'+id,lease,Date.now()).run();
  const saved=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('footprint:'+id).first<any>();
+ if(!saved)throw Error('FOOTPRINT_CLAIM_REQUIRED');
  const result=JSON.parse(saved.value);if(result.sha256!==receipt.sha256)throw Error('FOOTPRINT_ALREADY_DRAWN');
+ await recordSketchStep(db(),'footprint',id,'saved',{bytes:bytes.length});
  await footprintReferenceCache({bucket:bucket()}).finish(id,result);
  if(lease)await db().prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind('footprint-claim:'+id,lease).run();
  await publishCompletedSketches({db:db(),bucket:bucket(),p:await committed(),onlyKind:'footprint',onlyId:id});
@@ -100,7 +106,7 @@ export async function replaceFootprint(id:string,expectedSha256:string,bytes:Buf
  if(!(await footprints()).some((r:any)=>r.id===id))throw Error('VISIT_REQUIRED');
  const receipt=pngReceipt(bytes);
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.landmarkRecognizable!==true||!review.originalGeneratedPath)throw Error('FOOTPRINT_REVIEW_REQUIRED');
- if(receipt.width!==receipt.height)throw Error('SQUARE_PNG_REQUIRED');
+ validateCollectionImage(bytes);
  const key='footprint:'+id,old=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(key).first<any>();
  if(!old)throw Error('FOOTPRINT_NOT_DRAWN');
  const previous=JSON.parse(old.value);
