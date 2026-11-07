@@ -1,3 +1,4 @@
+import {queueSketchWork} from './sketch-work.mjs';
 import {dispatchSketch} from './sketch-progress.mjs';
 import {createHash,randomUUID,timingSafeEqual} from 'node:crypto';
 import {drawingSketches,registerSketchSelections,sketchSelectionState} from './sketch-lifecycle.mjs';
@@ -7,7 +8,7 @@ import {journeyUrl} from './site-links.mjs';
 // Wire identifiers stay stable so existing subscriptions survive; delivery is selection-only.
 export const collectionEventNames={meal:'hunem.meal_completed',soda:'hunem.soda_purchased'};
 const hash=s=>createHash('sha256').update(s).digest('hex');
-export const collectionEventDefinitions=Object.entries(collectionEventNames).map(([kind,name])=>({name,description:kind==='meal'?'A sourced local specialty dish is selected in the committed plan. Draw this collectionId privately now; actual eating completion releases the saved image.':'A soda brand and flavour are selected in the committed plan. Draw this collectionId privately now; only finishing that bottle releases the saved image.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},collectionId:{type:'string'},kind:{type:'string',enum:[kind]},name:{type:'string'},recordedAt:{type:'number'},url:{type:'string'}},required:['worldId','collectionId','kind','name','recordedAt','url'],additionalProperties:false}}));
+export const collectionEventDefinitions=Object.entries(collectionEventNames).map(([kind,name])=>({name,description:kind==='meal'?'A sourced local specialty dish is selected in the committed plan. Draw this collectionId privately now; actual eating completion releases the saved image.':'A soda brand and flavour are selected in the committed plan. Draw this collectionId privately now; only finishing that bottle releases the saved image.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},collectionId:{type:'string'},kind:{type:'string',enum:[kind]},name:{type:'string'},recordedAt:{type:'number'},url:{type:'string'},sketch:{type:'object'}},required:['worldId','collectionId','kind','name','recordedAt','url'],additionalProperties:false}}));
 export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.now,ready=async(_row)=>true,reference,siteOrigin=undefined}){
  const name=collectionEventNames[kind];if(!name)throw Error('INVALID_COLLECTION_KIND');
  const subPrefix='collection-event-sub:'+kind+':',deliveryPrefix='collection-event:'+kind+':';
@@ -59,7 +60,8 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
     if(saved.automaticRetries>0&&!saved.replayRequests?.length){await put(key,{...saved,status:'suppressed',suppressionReason:'AUTOMATIC_REPLAY_DISABLED',at:now()});continue;}
     const dispatched=await dispatchSketch({db,kind:kind,id:row.id,now:now(),manual:!!saved.replayRequests?.length,requestId:saved.replayRequests?.at(-1)?.id},async()=>{
     const deliveryId=saved.generation?eventId+'_r'+saved.generation:eventId,at=saved.recordedAt??occurrence.time;
-    const body=JSON.stringify({eventId:deliveryId,name,timestamp:new Date(at).toISOString(),data:{worldId:payload.world.publicationWorldId,collectionId:row.id,kind,name:row.name,recordedAt:at,url:journeyUrl(siteOrigin)},cursor:null});
+    const sketch=await queueSketchWork({db,bucket,kind,row,now:now()});
+    const body=JSON.stringify({eventId:deliveryId,name,timestamp:new Date(at).toISOString(),data:{worldId:payload.world.publicationWorldId,collectionId:row.id,kind,name:row.name,recordedAt:at,url:journeyUrl(siteOrigin),sketch},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,deliveryId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,deliveryId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
     await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});if(accepted)delivered++;return accepted;

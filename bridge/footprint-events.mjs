@@ -1,3 +1,4 @@
+import {queueSketchWork} from './sketch-work.mjs';
 import {dispatchSketch} from './sketch-progress.mjs';
 import {createHash,createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
 import {drawingSketches,registerSketchSelections,sketchSelectionState} from './sketch-lifecycle.mjs';
@@ -22,7 +23,7 @@ export function signedHeaders(secret,id,body,now=Date.now(),subscriptionId=''){
  const timestamp=String(Math.floor(now/1000)),signature=createHmac('sha256',signingKey(secret)).update(id+'.'+timestamp+'.'+body).digest('base64');
  return {'Content-Type':'application/json','webhook-id':id,'webhook-timestamp':timestamp,'webhook-signature':'v1,'+signature,'X-MCP-Subscription-Id':subscriptionId};
 }
-const eventDefinition={name:visitEvent,description:'A named landmark has been selected in the committed itinerary. Draw it privately now using the footprint tools. Only a real completed visit releases the saved image. Image saves never create visits or journal work.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},footprintId:{type:'string'},name:{type:'string'},visitedAt:{type:'number',description:'Legacy transport field: planned visit timestamp for this selection, not proof of completion.'},url:{type:'string'}},required:['worldId','footprintId','name','visitedAt','url'],additionalProperties:false}};
+const eventDefinition={name:visitEvent,description:'A named landmark has been selected in the committed itinerary. Draw it privately now using the footprint tools. Only a real completed visit releases the saved image. Image saves never create visits or journal work.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},footprintId:{type:'string'},name:{type:'string'},visitedAt:{type:'number',description:'Legacy transport field: planned visit timestamp for this selection, not proof of completion.'},url:{type:'string'},sketch:{type:'object'}},required:['worldId','footprintId','name','visitedAt','url'],additionalProperties:false}};
 export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,siteOrigin=undefined}){
  const completion=collectionCompletionService({db,kind:'footprint',now,reference:async row=>{const r=await footprintReferenceCache({bucket,now}).read(row.id);return {ready:r.photos.length>0,errors:r.errors};}});
  const get=async id=>{const r=await db.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(id).first();return r?JSON.parse(r.value):null;};
@@ -96,7 +97,8 @@ export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,site
     if(saved.automaticRetries>0&&!saved.replayRequests?.length){await put(key,{...saved,status:'suppressed',suppressionReason:'AUTOMATIC_REPLAY_DISABLED',at:now()});continue;}
     const dispatched=await dispatchSketch({db,kind:'footprint',id:row.id,now:now(),manual:!!saved.replayRequests?.length,requestId:saved.replayRequests?.at(-1)?.id},async()=>{
     attempted++;const eventId=saved.generation?baseId+'_r'+saved.generation:baseId;
-    const body=JSON.stringify({eventId,name:visitEvent,timestamp:new Date(row.selectedAt).toISOString(),data:{worldId:payload.world.publicationWorldId,footprintId:row.id,name:row.name,visitedAt:row.firstSeenAt,url:journeyUrl(siteOrigin)},cursor:null});
+    const sketch=await queueSketchWork({db,bucket,kind:'footprint',row,now:now()});
+    const body=JSON.stringify({eventId,name:visitEvent,timestamp:new Date(row.selectedAt).toISOString(),data:{worldId:payload.world.publicationWorldId,footprintId:row.id,name:row.name,visitedAt:row.firstSeenAt,url:journeyUrl(siteOrigin),sketch},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,eventId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,eventId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
     await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),footprintId:row.id,...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});

@@ -15,8 +15,8 @@ export async function processSketchEvents(p:any){
  // Completion releases prepared art locally; it never starts a second AI job.
  await Promise.allSettled(['meal','soda','footprint'].map(onlyKind=>publishCompletedSketches({db:env.DB,bucket:env.BUCKET,p,onlyKind}).catch(()=>console.log('sketch-release-pending:'+onlyKind))));
  // Independent delivery domains; one failure cannot starve the others or roll back the world.
- // Dispatch immediately. Reference acquisition belongs to the native drawing task,
- // rather than a second downloader which must finish before the task can start.
+ // Build and persist the drawing contract before dispatch. Native visual review
+ // opens the supplied reference sources; no model-side subject/claim preparation.
  const results=await Promise.allSettled([footprintEvents().process(p),collectionEvents('meal').process(p),collectionEvents('soda').process(p),sweepSavedReferences(p)]);
  for(const r of results)if(r.status==='rejected')console.log('sketch-event-delivery-pending');
 }

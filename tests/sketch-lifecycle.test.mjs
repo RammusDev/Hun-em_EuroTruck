@@ -51,7 +51,8 @@ test('real D1/R2: selection notifies once, art stages privately, completion alon
   const visitNotice=sent.find(e=>e.name===visitEvent);assert.equal(visitNotice.timestamp,new Date(at).toISOString());assert.ok(visitNotice.data.visitedAt>at,'legacy field carries the planned visit time; callback fields stay compatible');assert.equal(visitNotice.data.selectedAt,undefined);
   const queues=[await collections.collectionQueue('meal'),await collections.collectionQueue('soda'),await footprints.footprintQueue()];
   for(const q of queues)assert.equal(q.items.length,1);
-  const claims=[await collections.claimCollection('meal',queues[0].items[0].id),await collections.claimCollection('soda',queues[1].items[0].id),await footprints.claimFootprint(queues[2].items[0].id)];
+  const claims=['meal','soda','footprint'].map(kind=>{const packet=sent.find(e=>e.data.sketch.kind===kind).data.sketch;return {id:packet.id,lease:packet.work.save.arguments.lease};});
+  assert.equal((await collections.claimCollection('meal',claims[0].id)).action,'busy','legacy claim cannot steal prepared work');
   const rgba=Buffer.alloc(128*128*4,255);rgba[3]=0;const bytes=png.PNG.sync.write({width:128,height:128,data:rgba});
   const review={tool:'image_gen.imagegen',actuallyCalled:true,subjectRecognizable:true,landmarkRecognizable:true,originalGeneratedPath:'synthetic-test-fixture-only'};
   for(const [i,kind] of ['meal','soda','footprint'].entries())assert.equal(await BUCKET.get(`reference-photos/${kind==='meal'?'meal-v2':kind+'-v1'}/${claims[i].id}.json`),null,'direct native reference use must not require a saved photo');

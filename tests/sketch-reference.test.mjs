@@ -26,7 +26,7 @@ test('native reference handoff binds to exact selection and active lease, preser
    }
    const args={db,bucket,p,kind,id:row.id,lease:'active',bytes:jpeg,source:{sourcePage:'https://commons.wikimedia.org/wiki/File:Photo.jpg',sourceImage:'https://upload.wikimedia.org/Photo.jpg',credit:'Photographer',license:'CC0',visuallyMatched:true},now};
    await assert.rejects(()=>cacheSketchReference(args),/ACTIVE_REFERENCE_CLAIM_REQUIRED/);
-   await db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at,lease,lease_until) VALUES(?,?,0,?,?,?)').bind(key,'{}',now,'active',now+1200000).run();
+   await db.prepare('INSERT OR REPLACE INTO hunem_runtime(id,value,revision,updated_at,lease,lease_until) VALUES(?,?,0,?,?,?)').bind(key,'{}',now,'active',now+1200000).run();
    await assert.rejects(()=>cacheSketchReference({...args,source:{...args.source,visuallyMatched:false}}),/VISUAL_REVIEW_REQUIRED/);
    await assert.rejects(()=>cacheSketchReference({...args,id:'f'.repeat(32)}),/SELECTED_SUBJECT_REQUIRED/);
    assert.equal((await cacheSketchReference(args)).action,'reference-ready');

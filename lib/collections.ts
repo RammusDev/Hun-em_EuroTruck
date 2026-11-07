@@ -1,4 +1,4 @@
-import {recordSketchStep} from '../bridge/sketch-progress.mjs';
+import {recordSketchStep,activateQueuedSketch} from '../bridge/sketch-progress.mjs';
 import {env} from 'cloudflare:workers';
 import {committed} from './runtime';
 import {collectionInventory,collectionKinds} from '../bridge/collections.mjs';
@@ -83,7 +83,7 @@ export async function claimCollection(kind:string,id:string){
  valid(kind,id);const row=(await collectionRows(kind,undefined,true)).find((r:any)=>r.id===id);if(!row||!row.sketchEligible)throw Error('RECORDED_SPECIALTY_OR_PURCHASE_REQUIRED');if(row.image)return {action:'already-drawn',kind,id};
  const key='collection-claim:'+kind+':'+id,now=Date.now(),lease=crypto.randomUUID();
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(key,'{}',now).run();
- const acquired=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=?,value=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,now+20*60000,JSON.stringify({startedAt:now}),key,now).first();
+ const acquired=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=?,value=? WHERE id=? AND (lease IS NULL OR lease_until<?) AND COALESCE(json_extract(value,"$.queued"),0)!=1 RETURNING id').bind(lease,now+20*60000,JSON.stringify({startedAt:now}),key,now).first();
  if(acquired)await recordSketchStep(db(),kind,id,'claimed',{now});
  return acquired?{action:'generate',kind,id,lease,expiresAt:now+20*60000,item:row}:{action:'busy',kind,id};
 }
@@ -96,6 +96,7 @@ export async function saveCollection(kind:string,id:string,lease:string,bytes:Bu
   const saved=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('collection:'+kind+':'+id).first<any>();
   return {kind,id,...JSON.parse(saved.value),reused:true,worldModified:false};
  }
+ await activateQueuedSketch(db(),kind,id,lease);
  const claimKey='collection-claim:'+kind+':'+id,claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind(claimKey).first<any>();
  if(typeof lease!=='string'||!claim||claim.lease!==lease||claim.lease_until<Date.now())throw Error('COLLECTION_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.subjectRecognizable!==true||!review.originalGeneratedPath)throw Error('COLLECTION_REVIEW_REQUIRED');

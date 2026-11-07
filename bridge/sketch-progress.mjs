@@ -1,3 +1,5 @@
+import {activateQueuedSketch} from './sketch-work.mjs';
+export {activateQueuedSketch};
 // Observed tool steps only. No inference of model usage or renderer success.
 export const sketchStages=['reference_ready','image_generated'];
 export const sketchFailureCodes=['REFERENCE_UNAVAILABLE','PACKAGING_UNCONFIRMED','IMAGE_GENERATION_FAILED','IMAGE_VALIDATION_FAILED','IMAGE_SAVE_FAILED','RATE_LIMITED','TASK_INTERRUPTED','FILE_TRANSFER_FAILED','CLAIM_EXPIRED'];
@@ -19,6 +21,7 @@ export async function observeSketchReceive({db,kind,id,lease},read,save){
  const imageKey=kind==='footprint'?'footprint:'+id:`collection:${kind}:${id}`;
  // Completed saves remain byte-idempotent after the lease is released.
  const image=await db.prepare('SELECT id FROM hunem_runtime WHERE id=?').bind(imageKey).first();
+ if(!image)await activateQueuedSketch(db,kind,id,lease);
  const claim=await db.prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind(claimKey).first();
  const active=!!lease&&claim?.lease===lease&&claim.lease_until>Date.now();
  if(!image&&!active)throw Error('SKETCH_CLAIM_REQUIRED');

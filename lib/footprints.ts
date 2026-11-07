@@ -1,5 +1,5 @@
 import {validateCollectionImage} from '../bridge/collection-image.mjs';
-import {recordSketchStep} from '../bridge/sketch-progress.mjs';
+import {recordSketchStep,activateQueuedSketch} from '../bridge/sketch-progress.mjs';
 import {env} from 'cloudflare:workers';
 import {committed} from './runtime';
 import {footprintInventory,mapFootprints} from '../bridge/footprints.mjs';
@@ -61,7 +61,7 @@ export async function claimFootprint(id:string){
  if(!isId(id))throw Error('INVALID_FOOTPRINT');const row=(await footprints(true)).find((r:any)=>r.id===id);if(!row)throw Error('VISIT_REQUIRED');if(row.image)return {action:'already-drawn',id};
  const key='footprint-claim:'+id,now=Date.now(),lease=crypto.randomUUID();
  await db().prepare('INSERT OR IGNORE INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?)').bind(key,'{}',now).run();
- const result=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=?,value=? WHERE id=? AND (lease IS NULL OR lease_until<?) RETURNING id').bind(lease,now+20*60000,JSON.stringify({startedAt:now}),key,now).first();
+ const result=await db().prepare('UPDATE hunem_runtime SET lease=?,lease_until=?,value=? WHERE id=? AND (lease IS NULL OR lease_until<?) AND COALESCE(json_extract(value,"$.queued"),0)!=1 RETURNING id').bind(lease,now+20*60000,JSON.stringify({startedAt:now}),key,now).first();
  if(result)await recordSketchStep(db(),'footprint',id,'claimed',{now});
  return result?{action:'generate',id,lease,expiresAt:now+20*60000,item:row}:{action:'busy',id};
 }
@@ -75,6 +75,7 @@ export async function saveFootprint(id:string,bytes:Buffer,review:any,lease?:str
   const saved=await db().prepare('SELECT value FROM hunem_runtime WHERE id=?').bind('footprint:'+id).first<any>();
   return {...JSON.parse(saved.value),reused:true};
  }
+ await activateQueuedSketch(db(),'footprint',id,lease);
  const claim=await db().prepare('SELECT lease,lease_until FROM hunem_runtime WHERE id=?').bind('footprint-claim:'+id).first<any>();
  if(!lease||!claim||claim.lease!==lease||claim.lease_until<=Date.now())throw Error('FOOTPRINT_CLAIM_REQUIRED');
  if(review?.tool!=='image_gen.imagegen'||review.actuallyCalled!==true||review.landmarkRecognizable!==true||!review.originalGeneratedPath)throw Error('FOOTPRINT_REVIEW_REQUIRED');
