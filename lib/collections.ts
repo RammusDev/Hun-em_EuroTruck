@@ -1,4 +1,5 @@
 import {recordSketchStep,activateQueuedSketch} from '../bridge/sketch-progress.mjs';
+import {repairSketchSubject} from '../bridge/sketch-repairs.mjs';
 import {env} from 'cloudflare:workers';
 import {committed} from './runtime';
 import {collectionInventory,collectionKinds} from '../bridge/collections.mjs';
@@ -17,7 +18,7 @@ export async function collectionRows(kind:string,p?:any,drawing=false){
  const saved=await db().prepare('SELECT id,value FROM hunem_runtime WHERE id LIKE ?').bind('collection:'+kind+':%').all<any>();
  const images=new Map((saved.results||[]).map((r:any)=>[r.id.split(':')[2],JSON.parse(r.value)]));
  if(!drawing){const complete=new Map(completedSketches(p,kind).map((r:any)=>[r.id,r]));rows=rows.flatMap((r:any)=>complete.has(r.id)?[complete.get(r.id)]:images.has(r.id)&&(images.get(r.id) as any).sketchVersion!==2?[r]:[]);}
- return rows.map((r:any)=>{const stored:any=images.get(r.id),image=drawing||sketchIsPublic(stored)?stored:null,ref=kind==='soda'?sodaPackageReference(r):null;return {...r,...(kind==='soda'?{illustrationPackage:ref?{packageKind:ref.packageKind,sizeMl:ref.sizeMl||null,packageSelector:ref.packageSelector||null,sourcePage:ref.sourcePage,sourceImage:ref.sourceImage,checkedOn:ref.checkedOn,sourceType:ref.sourceType,sourceYear:ref.sourceYear,referenceRole:ref.referenceRole||'catalog-illustration-package',actualPurchasePackageKnown:false}:null}:{}),image:image?{src:image.src,thumbnail:image.thumbnail,sha256:image.sha256,drawnAt:image.drawnAt,width:image.width,height:image.height,sketchVersion:image.sketchVersion,publishedAt:image.publishedAt}:null};});
+ return rows.map((r:any)=>{r=repairSketchSubject(r,kind,p.world.publicationWorldId);const stored:any=images.get(r.id),image=drawing||sketchIsPublic(stored)?stored:null,ref=kind==='soda'?sodaPackageReference(r):null;return {...r,...(kind==='soda'?{illustrationPackage:ref?{packageKind:ref.packageKind,sizeMl:ref.sizeMl||null,packageSelector:ref.packageSelector||null,sourcePage:ref.sourcePage,sourceImage:ref.sourceImage,checkedOn:ref.checkedOn,sourceType:ref.sourceType,sourceYear:ref.sourceYear,referenceRole:ref.referenceRole||'catalog-illustration-package',actualPurchasePackageKnown:false}:null}:{}),image:image?{src:image.src,thumbnail:image.thumbnail,sha256:image.sha256,drawnAt:image.drawnAt,width:image.width,height:image.height,sketchVersion:image.sketchVersion,publishedAt:image.publishedAt}:null};});
 }
 export async function collectionRead(u:URL){
  if(u.searchParams.get('mode')==='summary'){

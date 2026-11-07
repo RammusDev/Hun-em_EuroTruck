@@ -2,6 +2,7 @@
 import {collectionInventory} from './collections.mjs';
 import {footprintInventory} from './footprints.mjs';
 import {verifyCollectionArtifacts} from './collection-artifacts.mjs';
+import {repairSketchSubject} from './sketch-repairs.mjs';
 
 export const sketchKinds=['meal','soda','footprint'];
 export const sketchKey=(kind,id)=>kind==='footprint'?'footprint:'+id:'collection:'+kind+':'+id;
@@ -62,7 +63,7 @@ export async function drawingSketches(db,p,kind,now=Date.now()){
  const stored=new Map((await records(db,selectionPrefix(kind))).map(r=>[r.id.slice(selectionPrefix(kind).length),JSON.parse(r.value)]));
  // Completed rows without a selection record remain available for explicit owner repair,
  // but event delivery below requires a recorded selection and cannot trigger on completion.
- return [...new Set([...selected.keys(),...completed.keys()])].map(id=>({...stored.get(id),...(selected.get(id)||completed.get(id)),selectedAt:stored.get(id)?.selectedAt??selected.get(id)?.selectedAt??null,selectionRecorded:stored.has(id),activityCompleted:completed.has(id)}));
+ return [...new Set([...selected.keys(),...completed.keys()])].map(id=>repairSketchSubject({...stored.get(id),...(selected.get(id)||completed.get(id)),selectedAt:stored.get(id)?.selectedAt??selected.get(id)?.selectedAt??null,selectionRecorded:stored.has(id),activityCompleted:completed.has(id)},kind,p.world.publicationWorldId));
 }
 
 export function sketchIsPublic(image){return !!image&&(image.sketchVersion!==2||Number.isFinite(image.publishedAt));}
@@ -70,7 +71,7 @@ export function sketchIsPublic(image){return !!image&&(image.sketchVersion!==2||
 export async function sketchSelectionState(db,p,kind,now=Date.now()){
  const active=new Set(selectedSketches(p,kind,now).map(r=>r.id)),complete=new Set(completedSketches(p,kind,now).map(r=>r.id));
  const images=new Map((await records(db,kind==='footprint'?'footprint:':'collection:'+kind+':')).map(r=>[r.id.split(':').at(-1),JSON.parse(r.value)]));
- return (await records(db,selectionPrefix(kind))).map(r=>JSON.parse(r.value)).filter(r=>r.worldId===p.world.publicationWorldId).map(r=>{
+ return (await records(db,selectionPrefix(kind))).map(r=>repairSketchSubject(JSON.parse(r.value),kind,p.world.publicationWorldId)).filter(r=>r.worldId===p.world.publicationWorldId).map(r=>{
   const image=images.get(r.id),cancelled=!active.has(r.id)&&!complete.has(r.id);
   return {id:r.id,name:r.name,state:cancelled?'cancelled':image?sketchIsPublic(image)?'published':complete.has(r.id)?'awaiting_release':'private_ready':complete.has(r.id)?'completed_waiting_art':'selected_waiting_art'};
  });

@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {mealReferenceCache} from './meal-reference-cache.mjs';
 import {sodaReferenceCache,sodaPackageReference} from './soda-reference.mjs';
 import {footprintReferenceCache} from './footprint-reference.mjs';
+import {reviewedReferenceSources,reviewedSketchReference} from './sketch-repairs.mjs';
 // Deterministic work preparation. The model receives one subject, not world history.
 export const sketchClaimKey=(kind,id)=>kind==='footprint'?'footprint-claim:'+id:`collection-claim:${kind}:${id}`;
 // Called inside the item dispatch lock, before sending a webhook. Waiting for the
@@ -9,7 +10,8 @@ export const sketchClaimKey=(kind,id)=>kind==='footprint'?'footprint-claim:'+id:
 export const sketchReferenceCache=({bucket,kind,now=Date.now})=>kind==='footprint'?footprintReferenceCache({bucket,now}):kind==='soda'?sodaReferenceCache({bucket,now}):mealReferenceCache({bucket,now});
 export async function ensureSketchReference({bucket,kind,row,now=Date.now()}){
  try{
-  const cache=sketchReferenceCache({bucket,kind,now:()=>now});
+  const sources=reviewedReferenceSources(kind,row);
+  const cache=sources?mealReferenceCache({bucket,kind,now:()=>now,lookup:()=>reviewedSketchReference(sources),lookupVersion:'owner-reviewed-recovery-20261107'}):sketchReferenceCache({bucket,kind,now:()=>now});
   if(await cache.shouldPrepare(row.id))await cache.prepare(row);
   return await cache.read(row.id);
  }catch{return {photos:[],errors:['REFERENCE_PREPARATION_FAILED']};}
