@@ -71,7 +71,7 @@ export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,site
     if(requests.some(r=>r.id===requestId))continue;
     if(saved.status==='pending')continue;
     if(requests.filter(r=>r.at>now()-86400000).length>=3)throw Error('REPLAY_DAILY_LIMIT');
-    await put(key,{...saved,status:'pending',attempts:0,nextAt:0,generation:(saved.generation||0)+1,replayRequests:[...requests,{id:requestId,at:now()}].slice(-10)});queued++;
+    await put(key,{...saved,status:'pending',attempts:0,referenceAttempts:0,nextAt:0,generation:(saved.generation||0)+1,replayRequests:[...requests,{id:requestId,at:now()}].slice(-10)});queued++;
    }finally{await db.prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(key,lease).run();}
   }
   return {id,action:queued?'replayed':'unchanged',queued,...await process(payload,id)};
@@ -99,7 +99,8 @@ export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,site
     attempted++;const eventId=saved.generation?baseId+'_r'+saved.generation:baseId;
     const sketch=await queueSketchWork({db,bucket,kind:'footprint',row,now:now(),prepareReference});
     if(sketch.action!=='generate'){
-     await put(key,{...saved,status:'pending',referencePending:true,referenceErrors:sketch.referenceErrors,nextAt:now()+5*60000,footprintId:row.id});return false;
+     const referenceAttempts=(saved.referenceAttempts||0)+1;
+     await put(key,{...saved,status:referenceAttempts>=8?'stopped':'pending',referencePending:true,referenceAttempts,referenceErrors:sketch.referenceErrors,nextAt:now()+Math.min(360,5*2**(referenceAttempts-1))*60000,footprintId:row.id});return false;
     }
     const body=JSON.stringify({eventId,name:visitEvent,timestamp:new Date(row.selectedAt).toISOString(),data:{worldId:payload.world.publicationWorldId,footprintId:row.id,name:row.name,visitedAt:row.firstSeenAt,url:journeyUrl(siteOrigin),sketch},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,eventId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,eventId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}

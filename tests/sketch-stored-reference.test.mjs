@@ -39,5 +39,12 @@ test('failed reference preparation sends no webhook, retries with backoff, then 
   await service.process(p);assert.equal(preparations,1);
   ready=true;now+=5*60000+1;await service.process(p);assert.equal(sends,1);await service.process(p);assert.equal(sends,1);
   const id=selectedSketches(p,'meal')[0].id;assert.equal((await readSketchReference({bucket,kind:'meal',id})).content[1].data,jpeg.toString('base64'));
+  // A permanently unavailable source has a finite server-side retry budget.
+  const receipt=await db.prepare("SELECT id,value FROM hunem_runtime WHERE id LIKE 'collection-event:meal:%'").first();
+  const failed={...JSON.parse(receipt.value),status:'pending',referenceAttempts:7,referencePending:true,nextAt:0};
+  await db.prepare('DELETE FROM hunem_runtime WHERE id=?').bind(sketchClaimKey('meal',id)).run();
+  await db.prepare('UPDATE hunem_runtime SET value=? WHERE id=?').bind(JSON.stringify(failed),receipt.id).run();
+  ready=false;await service.process(p);assert.equal((await service.status(p)).stopped,1);const count=preparations;
+  now+=86400000;await service.process(p);assert.equal(preparations,count);assert.equal(sends,1);
  }finally{await mf.dispose();}
 });

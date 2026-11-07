@@ -18,7 +18,7 @@
 
 通知僅帶主體、固定畫風、referenceRead及提交契約，不嵌大型base64、不交世界歷史給模型分析。hunem_sketch_reference只讀R2，不連外、不領取、不改世界；照片未備妥時不能作畫。AI不搜尋、不使用瀏覽器／shell，只目視已存照片、生圖、目視原成品及提交原始PNG路徑。
 
-照片失敗保留referencePending及安全錯誤碼，5分鐘退避；由既有事件／健康檢查再嘗試，尚未通知AI，不新增Cron。監控顯示reference_blocked／preparing_reference。已受理通知仍不自動重送。
+照片失敗保留referencePending及安全錯誤碼，5分鐘起倍增退避（上限6小時，最多8次後停止並待人工處理）；由既有事件／健康檢查再嘗試，尚未通知AI，不新增Cron。監控顯示reference_blocked／preparing_reference。已受理通知仍不自動重送。
 
 queueSketchWork只有參考就緒才保存排隊憑證。排隊不消耗20分鐘存圖租約，原生收圖才啟用。舊通知hunem_prepare_sketch相容入口保留唯一ID恢復與既有憑證，缺照片回reference_pending。存圖失敗重用同張原圖，不重畫。
 
