@@ -1,29 +1,25 @@
-# 三類事件作畫資料包
+# 三類速寫：Sites先存圖，AI原生讀圖
 
-2026-11-07。通知前準備版本僅本機修改，未部署／未同步雲端任務。正式仍為133。證據見 data/sketch-dispatch-20261107/REPORT.md。
+2026-11-07使用者指定，取代123／134的任務自行瀏覽來源方式。
 
-## 正常流程
+正式選定主體 → Sites下載並保存參考照片 → 照片就緒才通知原任務 → hunem_sketch_reference(kind,id)一次返回R2原生圖片 → imagegen → 原始成品私存／驗收 → 活動完成才公開。
 
-事件選定 → 程式核對主體／既有圖片及跨訂閱防重 → 保存主體、drawingPrompt、save 契約與排隊提交憑證 → 通知 data.sketch 直接攜帶資料包及參考來源 → AI 目視參考／構圖／imagegen／目視成品 → receive 原圖時程式啟用20分鐘保存租約 → 驗證及保存 → 真實活動完成才公開。
+| 責任 | 程式／文件 |
+|---|---|
+| 選定投影、公開門檻 | bridge/sketch-lifecycle.mjs、SKETCH_LIFECYCLE.md |
+| 參考就緒、精簡資料、原生讀圖 | bridge/sketch-work.mjs、lib/sketch-work.ts |
+| 景點照片 | bridge/footprint-reference.mjs |
+| 餐點照片 | bridge/collection-reference.mjs、collection-reference-fallback.mjs |
+| 汽水已審包裝 | bridge/soda-reference.mjs、soda-reference-catalog.json |
+| R2重用、格式／SHA、退避／清理 | bridge/meal-reference-cache.mjs、COLLECTION_REFERENCES.md |
+| 通知與防重 | bridge/footprint-events.mjs、collection-events.mjs、sketch-progress.mjs |
+| 工具與權限 | bridge/collection-tools.mjs、app/mcp/route.ts |
+| 三類任務提示 | public/*-event-worker-guide.md |
 
-排隊憑證綁定項目及 owner-only receive；等待平台不消耗存圖租約。未受理通知的有限傳輸重試沿用憑證及 preparedAt；舊claim不能搶走排隊工作。提交啟用租約且不因重複提交延長；格式驗證、保存再核鎖及公開門檻不變。監控區分 prepared_waiting_executor，不把程式準備當AI已開始。
+通知僅帶主體、固定畫風、referenceRead及提交契約，不嵌大型base64、不交世界歷史給模型分析。hunem_sketch_reference只讀R2，不連外、不領取、不改世界；照片未備妥時不能作畫。AI不搜尋、不使用瀏覽器／shell，只目視已存照片、生圖、目視原成品及提交原始PNG路徑。
 
-Webhook為JSON，只帶既有照片來源描述及已核對汽水包裝來源，不嵌大量base64。AI仍需用原生視覺工具開啟來源；無可靠照片時的原生參考取得仍是限制，不能聲稱所有照片已準備可用。不重啟強制下載流程。舊通知／人工維修prepare保留相容，排隊工作讀回既有憑證、不重領。
+照片失敗保留referencePending及安全錯誤碼，5分鐘退避；由既有事件／健康檢查再嘗試，尚未通知AI，不新增Cron。監控顯示reference_blocked／preparing_reference。已受理通知仍不自動重送。
 
-`hunem_prepare_sketch` 合併原先模型端 queue、status、claim 的往返。主體依既有 committed 世界及 sketch-selection 持久資料投影，不另建第二份世界事實表。圖片／lease／投遞仍由現有 D1 表處理。缺 ID 時 SQL 取該類 sent 投遞，與已提交且未有圖的 selection 交集；恰一項才恢復，否則 identity_required，絕不取最新一項猜選。這個備援不是任意歷史補畫入口；明確 ID 的呼叫保留原 owner 工具的人工維修能力。
+queueSketchWork只有參考就緒才保存排隊憑證。排隊不消耗20分鐘存圖租約，原生收圖才啟用。舊通知hunem_prepare_sketch相容入口保留唯一ID恢復與既有憑證，缺照片回reference_pending。存圖失敗重用同張原圖，不重畫。
 
-取得 lease 沿用現有條件 UPDATE；busy／already-drawn 不讀參考、不生圖。保存再核 lease 並以 INSERT OR IGNORE 防覆寫。AI 不接收全日事件、occurrences 歷史或其他候選。快取只讀且可選，失效不阻擋作畫；不恢復123前的強制下載／快取／回讀要求。
-
-## 責任界線
-
-- 程式：事件 ID／主體核對、租約、既有圖防重、汽水已審核 illustrationPackage、各類固定畫風模板、PNG解碼／正方形／透明及可見像素、原圖SHA／縮圖讀回、活動完成公開、監控與通知。
-- AI：主體照片是否正確、缺少可用照片時的可靠原生參考取得、構圖、生圖、成品視覺辨識。receive review 的 true 僅能反映真實生成與目視。
-- 平台環境：網站沒有可查 OpenAI executor 是否可用的介面，也無法替雲端任務啟動環境；本次不宣稱已實作平台環境預檢或修復平台事故。
-
-保存步驟原已有格式驗證，本次移除三個任務提示內重複 shell 驗尺寸／透明度要求，沒有削弱服務端門檻。任務只需目視後原生提交，不要求先用 shell 開圖；是否能目視仍由平台工具能力決定。
-
-## 失敗與相容性
-
-不自動重送已受理通知、不新增Cron、不改23:05／23:30或GET純讀。失敗記錄沿原工具；保存失敗只續傳同張原圖。跨任務原圖持久續傳尚未實作，檔案若未交入網站且平台遺失，不能聲稱可自動恢復。舊 queue／claim／receive 工具保留相容，三個雲端任務需同步 data.sketch 提示才會直接作畫；目前僅準備提示檔，未同步。
-
-仍需自然事件驗收參考取得與端到端作畫；隔離測試不算正式生圖。字元／步驟減少不代表平台額度可同比量測。
+伺服器驗證PNG尺寸、透明度、SHA與原圖／縮圖讀回；活動完成才公開。23:05每日插圖既有hunem_reference_art從Sites讀身份圖／最近成品，時序不變；state GET純讀。此改動移除來源瀏覽依賴，不保證平台imagegen或執行環境永遠可用；隔離測試不等於正式自然事件驗收。

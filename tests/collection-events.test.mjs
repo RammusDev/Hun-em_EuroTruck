@@ -8,7 +8,7 @@ test('meal/soda isolated D1 subscriptions: historical watermark, real completion
   const db=await mf.getD1Database('DB'),bucket=await mf.getR2Bucket('BUCKET');await db.prepare('CREATE TABLE hunem_runtime(id TEXT PRIMARY KEY,value TEXT,revision INTEGER,updated_at INTEGER,lease TEXT,lease_until INTEGER)').run();
   let now=1792800000000,fail=false;const sent=[];
   const fetcher=async(url,o)=>{const body=JSON.parse(o.body);if(body.type==='verification')return Response.json({challenge:body.challenge});sent.push({url,body});return new Response(null,{status:fail?503:202});};
-  const service=kind=>collectionEventService({db,bucket,kind,now:()=>now,fetcher,siteOrigin:'https://configured-site.example'}),args=kind=>({name:collectionEventNames[kind],delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/'+kind,secret},arguments:{},ttlMs:3600000});
+  const service=kind=>collectionEventService({prepareReference:async()=>({photos:[{bytes:Buffer.from("photo"),mimeType:"image/png",sourcePage:"https://example.test"}],errors:[]}),db,bucket,kind,now:()=>now,fetcher,siteOrigin:'https://configured-site.example'}),args=kind=>({name:collectionEventNames[kind],delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/'+kind,secret},arguments:{},ttlMs:3600000});
   await assert.rejects(()=>service('soda').rpc('events/subscribe',args('soda'),'','w'),/OWNER_REQUIRED/);
   for(const kind of ['meal','soda'])await service(kind).rpc('events/subscribe',args(kind),'owner','w');
   const meal=(id,time,local=true)=>({type:'meal_finished',mealId:id,time,day:'day',meal:'lunch',food:{name:id,localDish:local,source:'https://example.org/food',cityId:'a'}}),soda=(id,time)=>({type:'expense',category:'soda',id,time,day:'day',soda:{id,name:id}});

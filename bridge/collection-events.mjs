@@ -9,7 +9,7 @@ import {journeyUrl} from './site-links.mjs';
 export const collectionEventNames={meal:'hunem.meal_completed',soda:'hunem.soda_purchased'};
 const hash=s=>createHash('sha256').update(s).digest('hex');
 export const collectionEventDefinitions=Object.entries(collectionEventNames).map(([kind,name])=>({name,description:kind==='meal'?'A sourced local specialty dish is selected in the committed plan. Draw this collectionId privately now; actual eating completion releases the saved image.':'A soda brand and flavour are selected in the committed plan. Draw this collectionId privately now; only finishing that bottle releases the saved image.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},collectionId:{type:'string'},kind:{type:'string',enum:[kind]},name:{type:'string'},recordedAt:{type:'number'},url:{type:'string'},sketch:{type:'object'}},required:['worldId','collectionId','kind','name','recordedAt','url'],additionalProperties:false}}));
-export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.now,ready=async(_row)=>true,reference,siteOrigin=undefined}){
+export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.now,ready=async(_row)=>true,reference,siteOrigin=undefined,prepareReference=undefined}){
  const name=collectionEventNames[kind];if(!name)throw Error('INVALID_COLLECTION_KIND');
  const subPrefix='collection-event-sub:'+kind+':',deliveryPrefix='collection-event:'+kind+':';
  const get=async id=>{const row=await db.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(id).first();return row?JSON.parse(row.value):null;};
@@ -49,7 +49,7 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
   for(const sub of subs)for(const row of rows){
    // Subscription start is a durable watermark: history appears in the UI but never floods AI.
    const occurrence={time:row.selectedAt};if(!Number.isFinite(occurrence.time)||occurrence.time<sub.createdAt)continue;
-   // Missing cloud photos must still reach the native reference acquisition task.
+   // Missing cloud photos stay server-side; never wake AI without native references.
    if(attempted>=2)return {subscriptions:subs.length,delivered};
    const eventId=kind+'_'+hash(sub.key+'\n'+row.id).slice(0,40),key=deliveryPrefix+eventId,old=await get(key);
    if(old&&(old.status==='sent'||old.status==='stopped'||old.status==='suppressed'||old.nextAt>now()))continue;
@@ -60,11 +60,14 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
     if(saved.automaticRetries>0&&!saved.replayRequests?.length){await put(key,{...saved,status:'suppressed',suppressionReason:'AUTOMATIC_REPLAY_DISABLED',at:now()});continue;}
     const dispatched=await dispatchSketch({db,kind:kind,id:row.id,now:now(),manual:!!saved.replayRequests?.length,requestId:saved.replayRequests?.at(-1)?.id},async()=>{
     const deliveryId=saved.generation?eventId+'_r'+saved.generation:eventId,at=saved.recordedAt??occurrence.time;
-    const sketch=await queueSketchWork({db,bucket,kind,row,now:now()});
+    const sketch=await queueSketchWork({db,bucket,kind,row,now:now(),prepareReference});
+    if(sketch.action!=='generate'){
+     await put(key,{...saved,status:'pending',referencePending:true,referenceErrors:sketch.referenceErrors,nextAt:now()+5*60000,collectionId:row.id});return false;
+    }
     const body=JSON.stringify({eventId:deliveryId,name,timestamp:new Date(at).toISOString(),data:{worldId:payload.world.publicationWorldId,collectionId:row.id,kind,name:row.name,recordedAt:at,url:journeyUrl(siteOrigin),sketch},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,deliveryId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,deliveryId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
-    await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});if(accepted)delivered++;return accepted;
+    await put(key,{...saved,referencePending:false,referenceErrors:[],status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});if(accepted)delivered++;return accepted;
     });
     if(dispatched===false)await put(key,{...saved,status:'suppressed',suppressionReason:'EXISTING_WORK',collectionId:row.id,at:now()});
    }finally{await db.prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(key,lease).run();}
@@ -80,6 +83,6 @@ export function collectionEventService({db,bucket,kind,fetcher=fetch,now=Date.no
    try{const saved=JSON.parse(locked.value),requests=saved.replayRequests||[];if(requests.some(r=>r.id===requestId)||saved.status==='pending')continue;if(requests.filter(r=>r.at>now()-86400000).length>=3)throw Error('REPLAY_DAILY_LIMIT');await put(e.key,{...saved,status:'pending',attempts:0,nextAt:0,generation:(saved.generation||0)+1,replayRequests:[...requests,{id:requestId,at:now()}].slice(-10)});queued++;}finally{await db.prepare('UPDATE hunem_runtime SET lease=NULL,lease_until=NULL WHERE id=? AND lease=?').bind(e.key,lease).run();}
   }return {kind,id,action:queued?'replayed':'unchanged',queued,...await process(payload,id)};
  }
- async function status(payload){const subs=await all(subPrefix),events=await all(deliveryPrefix);return {kind,name,activeSubscriptions:subs.filter(active).length,expiredSubscriptions:subs.filter(s=>s.enabled&&!active(s)).length,delivered:events.filter(e=>e.status==='sent').length,retrying:events.filter(e=>e.status==='pending').length,stopped:events.filter(e=>e.status==='stopped').length,latestDelivery:events.filter(e=>e.at).sort((a,b)=>b.at-a.at).slice(0,3).map(e=>({collectionId:e.collectionId,recordedAt:e.recordedAt,status:e.status,httpStatus:e.httpStatus,at:e.at,attempts:e.attempts,automaticRetries:e.automaticRetries||0})),...(payload?{completion:await completion.state(payload)}:{})};}
+ async function status(payload){const subs=await all(subPrefix),events=await all(deliveryPrefix);return {kind,name,activeSubscriptions:subs.filter(active).length,expiredSubscriptions:subs.filter(s=>s.enabled&&!active(s)).length,preparingReferences:events.filter(e=>e.referencePending&&e.status==='pending').length,delivered:events.filter(e=>e.status==='sent').length,retrying:events.filter(e=>e.status==='pending').length,stopped:events.filter(e=>e.status==='stopped').length,latestDelivery:events.filter(e=>e.at).sort((a,b)=>b.at-a.at).slice(0,3).map(e=>({collectionId:e.collectionId,recordedAt:e.recordedAt,status:e.status,httpStatus:e.httpStatus,at:e.at,attempts:e.attempts,referencePending:!!e.referencePending,referenceErrors:e.referenceErrors||[],automaticRetries:e.automaticRetries||0})),...(payload?{completion:await completion.state(payload)}:{})};}
  return {rpc,process,status:async p=>({...await status(p),...(p?{selections:await sketchSelectionState(db,p,kind,now())}:{})}),replay,recordFailure:completion.failure};
 }

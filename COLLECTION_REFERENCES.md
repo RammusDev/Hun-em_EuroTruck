@@ -1,21 +1,13 @@
-# 收藏參考照片：快取、來源與清除
+# 參考照片：Sites保存與原生讀取
 
-時序只由 [SKETCH_LIFECYCLE.md](SKETCH_LIFECYCLE.md) 決定。三類正常流程為：已確定抽選＋取得可用參考圖 → 原生圖片直接交imagegen → 生成成品私存 → 活動完成後公開。參考照片不必先下載成檔、上傳網站或回讀；網站沒有參考快取也可正常收圖。以下照片快取只作可選維修／既有重試支援，不能成為開始作畫或接收成品的必要條件。
+2026-11-07使用者指定的新流程，取代123／134「任務瀏覽、快取可選」的正常路徑。時序見SKETCH_LIFECYCLE.md，完整索引見SKETCH_WORK.md。
 
-## 取得與邊界
+Sites server在正式選定後下載並保存照片，就緒才通知AI。hunem_sketch_reference(kind,id)只讀R2並核對格式／SHA，返回實際原生image blocks；不開來源網站、不要求本機下載器或瀏覽器。模型目視照片後直接交imagegen，缺照片回REFERENCE_UNAVAILABLE並停止。
 
-- 抽選通知直接交原生繪圖任務，不再先執行背景照片下載。任務目視現有原生參考圖後直接用num_last_images_to_include；所有參考已有本機路徑才用referenced_image_paths，兩者不併用。缺可靠參考才回報失敗，快取為空或雲端403本身不是失敗證明。
-- 明確維修時仍可沿既有prepare helper準備照片，每輪最多2款／檢視16筆、D1租約與5分鐘失敗退避保留；queue／讀者GET不下載或寫入。
-- 料理使用可靠照片來源與已核對官方備援；每張PNG／JPEG最多1MiB、精確HTTPS主機白名單、manual redirects及整輪8秒預算。
-- 汽水目錄含37款的明確品牌／口味代表包裝；31款容量有來源、6款null不猜。36款原廠／CDN，Gubernija為原廠2020歷史包裝，明列來源年份；參照包裝不回填為當時實際購買容器。
-- 汽水每輪最多3個核對來源、單源6秒並共用8秒，1MiB及JPEG／PNG／WebP格式／SHA檢查；來源變動明示REFERENCE_SOURCE_CHANGED，不繞過上游拒絕。
+三類每輪最多2項，沿原項目鎖及訂閱水位。照片失敗保存referencePending／安全錯誤碼並至少5分鐘退避，既有背景事件再嘗試；尚未通知AI，不新增Cron。queue／讀圖／讀者GET不下載或寫入。舊prepare相容入口可在伺服器準備照片，沒有照片回reference_pending。
 
-## 保存與使用
+景點使用精確Wikipedia文章與Wikimedia圖片；餐點使用Commons照片及已核對官方備援；汽水使用37款已核對品牌／口味圖鑑包裝。保留HTTPS主機白名單、manual redirects、1MiB及整輪8秒預算。汽水每輪最多3來源／單源6秒、已審SHA檢查；來源改動回REFERENCE_SOURCE_CHANGED，不繞過拒絕，不把圖鑑容器回填為實際購買容器。
 
-R2 reference-photos/meal-v2、soda-v1及footprint-v1按穩定主體ID暫存照片bytes、來源、作者／權利與SHA。仍待繪的有效照片保留至成品驗證成功；取消／不再待繪的過期暫存沿7天及既有有界清理處理。原生queue只讀快取並核對格式／hash，已備好就不另搜；已畫ID不回傳參考。明確選定的圖鑑包裝可作畫，不因actualPurchasePackageKnown=false而誤判無合格參照。
+R2 reference-photos/meal-v2、soda-v1及footprint-v1按主體ID保存照片bytes、來源／作者／權利與SHA。有效待繪照片保持重用，不因7天重抓；非待繪過期照片沿既有32件分頁清理。Webhook不嵌base64，只帶referenceRead及來源描述。
 
-原生任務先claim，使用已取得且目視的精確主體參考圖片直接作畫；原生圖片不必取得本機路徑。有合格既有快取可直接沿用，沒有時由原生搜尋／瀏覽器取可靠實物圖片，不必存回網站。料理核對菜名與實際配料、景點核對現況、汽水核對已審品牌／口味／圖鑑包裝；不因取消傳輸門檻而放寬視覺核對。hunem_cache_sketch_reference僅保留為可選維修工具，以有效lease、來源及權利保存參考；汽水匯入快取仍核對既有SHA。所有維修保存沿同一準備鎖，不覆蓋合格既有照片。
-
-保存原PNG及縮圖後，實際讀回SHA／JPEG成功才刪參考照片；失敗保留供同圖重試。並行準備／保存後重查成品，避免又留下照片。reference-audit永久保留不含base64的來源／權利／hash與清除原因。
-
-沿既有有界分頁掃32件及保存游標清除TTL／舊快取，不新增Cron或永久照片池。維修、錯誤與重試見 [COLLECTION_COMPLETION.md](COLLECTION_COMPLETION.md)。
+原PNG與縮圖實際讀回SHA／JPEG成功後才清除參考bytes，失敗保留供同圖存檔重試。reference-audit永久保留來源／權利／hash與清除原因，不留base64。既有擁有者匯入維修保留有效lease、來源及已審包裝SHA要求。已受理通知不自動重送AI，見COLLECTION_COMPLETION.md。

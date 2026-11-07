@@ -36,7 +36,7 @@ test('observed steps survive concurrency, classify receive failures, and suppres
    {type:'visit',time:clock+60000,place:{topicId:'church',name:'Church',p:[9,54]}}
   ]]]}]}};
   for(const kind of ['meal','soda','footprint']){
-   const service=kind==='footprint'?footprintEventService({db,bucket,fetcher,now:()=>clock}):collectionEventService({db,bucket,kind,fetcher,now:()=>clock});
+   const service=kind==='footprint'?footprintEventService({prepareReference:async()=>({photos:[{bytes:Buffer.from("photo"),mimeType:"image/png",sourcePage:"https://example.test"}],errors:[]}),db,bucket,fetcher,now:()=>clock}):collectionEventService({prepareReference:async()=>({photos:[{bytes:Buffer.from("photo"),mimeType:"image/png",sourcePage:"https://example.test"}],errors:[]}),db,bucket,kind,fetcher,now:()=>clock});
    for(const suffix of ['one','two','three'])await service.rpc('events/subscribe',{name:kind==='footprint'?visitEvent:kind==='meal'?'hunem.meal_completed':'hunem.soda_purchased',delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/'+kind+suffix,secret:'whsec_'+Buffer.alloc(32,5).toString('base64')}},'owner','w');
    const before=sent.length;await Promise.all([service.process(p),service.process(p)]);await service.process(p);assert.equal(sent.length,before+1,'two subscriptions notify each subject only once');
    clock+=31*60000;await service.process(p);assert.equal(sent.length,before+1,'no automatic replay after acceptance');

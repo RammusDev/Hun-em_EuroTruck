@@ -8,20 +8,20 @@ test('prepared event survives executor delay and transport retries; only matchin
   const db=await mf.getD1Database('DB');await db.prepare('CREATE TABLE hunem_runtime(id TEXT PRIMARY KEY,value TEXT,revision INTEGER,updated_at INTEGER,lease TEXT,lease_until INTEGER)').run();
   for(const kind of ['footprint','meal','soda']){
    const row={id:'a'.repeat(32),name:'Committed subject',source:'https://example.test/subject',selectionRecorded:true,sketchEligible:true};
-   const packet=await queueSketchWork({db,kind,row,now:1000}),key=sketchClaimKey(kind,row.id),token=packet.work.save.arguments.lease;
+   const packet=await queueSketchWork({db,kind,row,prepareReference:async()=>({photos:[{sourcePage:row.source}],errors:[]}),now:1000}),key=sketchClaimKey(kind,row.id),token=packet.work.save.arguments.lease;
    assert.equal(packet.work.save.arguments.id,row.id);assert.equal(packet.references[0].sourcePage,row.source);
    assert.equal((await db.prepare('SELECT lease_until FROM hunem_runtime WHERE id=?').bind(key).first()).lease_until,0);
-   const retry=await queueSketchWork({db,kind,row,now:86400000});assert.deepEqual(retry,packet);
+   const retry=await queueSketchWork({db,kind,row,prepareReference:async()=>({photos:[{sourcePage:row.source}],errors:[]}),now:86400000});assert.deepEqual(retry,packet);
    await activateQueuedSketch(db,kind,row.id,'wrong',86400000);
    assert.equal((await db.prepare('SELECT lease_until FROM hunem_runtime WHERE id=?').bind(key).first()).lease_until,0);
-   const compat=await prepareSketchWork({db,kind,id:row.id,rows:[row],claim:()=>{throw Error('must not claim twice');},reference:async()=>({photos:[],errors:[]})});
+   const compat=await prepareSketchWork({db,kind,id:row.id,rows:[row],claim:()=>{throw Error('must not claim twice');},reference:async()=>({photos:[{bytes:Buffer.from("photo"),mimeType:"image/png"}],errors:[]})});
    assert.equal(JSON.parse(compat.content[0].text).lease,token);
    await activateQueuedSketch(db,kind,row.id,token,86400000);
    const active=await db.prepare('SELECT value,lease_until FROM hunem_runtime WHERE id=?').bind(key).first();
    assert.equal(active.lease_until,86400000+20*60000);assert.equal(JSON.parse(active.value).startedAt,86400000);
    await activateQueuedSketch(db,kind,row.id,token,86400001);
    assert.equal((await db.prepare('SELECT lease_until FROM hunem_runtime WHERE id=?').bind(key).first()).lease_until,active.lease_until);
-   await assert.rejects(()=>queueSketchWork({db,kind,row,now:86400001}),/SKETCH_BUSY/);
+   await assert.rejects(()=>queueSketchWork({db,kind,row,prepareReference:async()=>({photos:[{sourcePage:row.source}],errors:[]}),now:86400001}),/SKETCH_BUSY/);
   }
  }finally{await mf.dispose();}
 });
@@ -44,7 +44,7 @@ test('three sketch kinds: deterministic delivered-ID recovery, compact native ha
    assert.equal((await prepareSketchWork({...deps,rows:[row,{...row,id:other}]})).action,'identity_required');assert.equal(claims,1);
    assert.equal((await prepareSketchWork({...deps,id,rows:[{...row,image:{sha256:'saved'}}]})).action,'already-drawn');assert.equal(claims,1);
    assert.equal((await prepareSketchWork({...deps,id,claim:async()=>({action:'busy'})})).action,'busy');assert.equal(reads,1);
-   const empty=await prepareSketchWork({...deps,id,reference:async()=>{throw Error('cache outage');}});assert.equal(JSON.parse(empty.content[0].text).action,'generate');assert.equal(empty.content.length,1);
+   const empty=await prepareSketchWork({...deps,id,reference:async()=>{throw Error('cache outage');}});assert.equal(empty.action,'reference_pending');
    await assert.rejects(()=>prepareSketchWork({...deps,id:other}),/RECORDED_SKETCH_REQUIRED/);
   }
   await assert.rejects(()=>prepareSketchWork({kind:'other'}),/INVALID_SKETCH/);

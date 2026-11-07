@@ -20,9 +20,9 @@ test('native reference handoff binds to exact selection and active lease, preser
    const row=selectedSketches(p,kind)[0],key=kind==='meal'?'collection-claim:meal:'+row.id:'footprint-claim:'+row.id;
    if(kind==='meal'){
     let notifications=0;
-    const service=collectionEventService({db,bucket,kind,now:()=>now,ready:async()=>false,fetcher:async(url,options)=>{const body=JSON.parse(options.body);if(body.type==='verification')return Response.json({challenge:body.challenge});notifications++;return new Response(null,{status:200});}});
+    const service=collectionEventService({prepareReference:async()=>({photos:[],errors:["REFERENCE_HTTP_403"]}),db,bucket,kind,now:()=>now,ready:async()=>false,fetcher:async(url,options)=>{const body=JSON.parse(options.body);if(body.type==='verification')return Response.json({challenge:body.challenge});notifications++;return new Response(null,{status:200});}});
     await service.rpc('events/subscribe',{name:'hunem.meal_completed',arguments:{},delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/reference-test',secret:'whsec_'+Buffer.alloc(32,8).toString('base64')},ttlMs:86400000},'owner','w');
-    await service.process(p);assert.equal(notifications,1,'HTTP403 at preparation must not prevent native acquisition task from starting');
+    await service.process(p);assert.equal(notifications,0,'HTTP403 must not wake an AI task without a stored reference');
    }
    const args={db,bucket,p,kind,id:row.id,lease:'active',bytes:jpeg,source:{sourcePage:'https://commons.wikimedia.org/wiki/File:Photo.jpg',sourceImage:'https://upload.wikimedia.org/Photo.jpg',credit:'Photographer',license:'CC0',visuallyMatched:true},now};
    await assert.rejects(()=>cacheSketchReference(args),/ACTIVE_REFERENCE_CLAIM_REQUIRED/);

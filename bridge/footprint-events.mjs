@@ -24,7 +24,7 @@ export function signedHeaders(secret,id,body,now=Date.now(),subscriptionId=''){
  return {'Content-Type':'application/json','webhook-id':id,'webhook-timestamp':timestamp,'webhook-signature':'v1,'+signature,'X-MCP-Subscription-Id':subscriptionId};
 }
 const eventDefinition={name:visitEvent,description:'A named landmark has been selected in the committed itinerary. Draw it privately now using the footprint tools. Only a real completed visit releases the saved image. Image saves never create visits or journal work.',delivery:['webhook'],inputSchema:{type:'object',properties:{},additionalProperties:false},payloadSchema:{type:'object',properties:{worldId:{type:'string'},footprintId:{type:'string'},name:{type:'string'},visitedAt:{type:'number',description:'Legacy transport field: planned visit timestamp for this selection, not proof of completion.'},url:{type:'string'},sketch:{type:'object'}},required:['worldId','footprintId','name','visitedAt','url'],additionalProperties:false}};
-export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,siteOrigin=undefined}){
+export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,siteOrigin=undefined,prepareReference=undefined}){
  const completion=collectionCompletionService({db,kind:'footprint',now,reference:async row=>{const r=await footprintReferenceCache({bucket,now}).read(row.id);return {ready:r.photos.length>0,errors:r.errors};}});
  const get=async id=>{const r=await db.prepare('SELECT value FROM hunem_runtime WHERE id=?').bind(id).first();return r?JSON.parse(r.value):null;};
  const put=async(id,value)=>db.prepare('INSERT INTO hunem_runtime(id,value,revision,updated_at) VALUES(?,?,0,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,revision=revision+1,updated_at=excluded.updated_at').bind(id,JSON.stringify(value),now()).run();
@@ -97,11 +97,14 @@ export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,site
     if(saved.automaticRetries>0&&!saved.replayRequests?.length){await put(key,{...saved,status:'suppressed',suppressionReason:'AUTOMATIC_REPLAY_DISABLED',at:now()});continue;}
     const dispatched=await dispatchSketch({db,kind:'footprint',id:row.id,now:now(),manual:!!saved.replayRequests?.length,requestId:saved.replayRequests?.at(-1)?.id},async()=>{
     attempted++;const eventId=saved.generation?baseId+'_r'+saved.generation:baseId;
-    const sketch=await queueSketchWork({db,bucket,kind:'footprint',row,now:now()});
+    const sketch=await queueSketchWork({db,bucket,kind:'footprint',row,now:now(),prepareReference});
+    if(sketch.action!=='generate'){
+     await put(key,{...saved,status:'pending',referencePending:true,referenceErrors:sketch.referenceErrors,nextAt:now()+5*60000,footprintId:row.id});return false;
+    }
     const body=JSON.stringify({eventId,name:visitEvent,timestamp:new Date(row.selectedAt).toISOString(),data:{worldId:payload.world.publicationWorldId,footprintId:row.id,name:row.name,visitedAt:row.firstSeenAt,url:journeyUrl(siteOrigin),sketch},cursor:null});
     let status=0;try{const headers=signedHeaders(sub.secret,eventId,body,now(),sub.key);if(sub.oldSecretUntil>now())headers['webhook-signature']+=' '+signedHeaders(sub.oldSecret,eventId,body,now(),sub.key)['webhook-signature'];const r=await fetcher(callbackUrl(sub.url),{method:'POST',headers,body,redirect:'manual',signal:AbortSignal.timeout(8000)});status=r.status;await r.body?.cancel();}catch{}
     const attempts=(saved.attempts||0)+1,accepted=status>=200&&status<300;
-    await put(key,{...saved,status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),footprintId:row.id,...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});
+    await put(key,{...saved,referencePending:false,referenceErrors:[],status:accepted?'sent':[410,413].includes(status)||attempts>=8?'stopped':'pending',attempts,httpStatus:status,nextAt:now()+Math.min(30,2**Math.min(attempts,5))*60000,at:now(),footprintId:row.id,...(accepted?{firstAcceptedAt:saved.firstAcceptedAt||now(),completionDueAt:now()+completionGraceMs*2**Math.min(saved.automaticRetries||0,3)}:{})});
     if(accepted)delivered++;return accepted;
     });
     if(dispatched===false)await put(key,{...saved,status:'suppressed',suppressionReason:'EXISTING_WORK',footprintId:row.id,at:now()});
@@ -109,6 +112,6 @@ export function footprintEventService({db,bucket,fetcher=fetch,now=Date.now,site
   }
   return {subscriptions:subscriptions.length,delivered};
  }
- async function status(){const subs=await all('mcp-event-sub:'),events=await all('footprint-event:');return {activeSubscriptions:subs.filter(active).length,expiredSubscriptions:subs.filter(s=>s.enabled&&!active(s)).length,delivered:events.filter(e=>e.status==='sent').length,retrying:events.filter(e=>e.status==='pending').length,stopped:events.filter(e=>e.status==='stopped').length,latestDelivery:events.filter(e=>e.at).sort((a,b)=>b.at-a.at).slice(0,3).map(e=>({footprintId:e.footprintId,status:e.status,httpStatus:e.httpStatus,at:e.at,attempts:e.attempts}))};}
+ async function status(){const subs=await all('mcp-event-sub:'),events=await all('footprint-event:');return {activeSubscriptions:subs.filter(active).length,expiredSubscriptions:subs.filter(s=>s.enabled&&!active(s)).length,preparingReferences:events.filter(e=>e.referencePending&&e.status==='pending').length,delivered:events.filter(e=>e.status==='sent').length,retrying:events.filter(e=>e.status==='pending').length,stopped:events.filter(e=>e.status==='stopped').length,latestDelivery:events.filter(e=>e.at).sort((a,b)=>b.at-a.at).slice(0,3).map(e=>({footprintId:e.footprintId,status:e.status,httpStatus:e.httpStatus,at:e.at,attempts:e.attempts,referencePending:!!e.referencePending,referenceErrors:e.referenceErrors||[]}))};}
  return {rpc,process,status:async p=>({...await status(),...(p?{completion:await completion.state(p),selections:await sketchSelectionState(db,p,'footprint',now())}:{})}),replay,recordFailure:completion.failure};
 }

@@ -45,7 +45,7 @@ test('real D1/R2: selection notifies once, art stages privately, completion alon
   globalThis.__sketchLifecycle={DB,BUCKET,p};
   const [collections,footprints]=await Promise.all([loadApi('collections'),loadApi('footprints')]);
   const fetcher=async(_url,o)=>{const body=JSON.parse(o.body);if(body.type==='verification')return Response.json({challenge:body.challenge});sent.push(body);return new Response(null,{status:202});};
-  const services=[...['meal','soda'].map(kind=>collectionEventService({db:DB,bucket:BUCKET,kind,now:()=>at,fetcher})),footprintEventService({db:DB,bucket:BUCKET,now:()=>at,fetcher})];
+  const services=[...['meal','soda'].map(kind=>collectionEventService({prepareReference:async()=>({photos:[{bytes:Buffer.from("photo"),mimeType:"image/png",sourcePage:"https://example.test"}],errors:[]}),db:DB,bucket:BUCKET,kind,now:()=>at,fetcher})),footprintEventService({prepareReference:async()=>({photos:[{bytes:Buffer.from("photo"),mimeType:"image/png",sourcePage:"https://example.test"}],errors:[]}),db:DB,bucket:BUCKET,now:()=>at,fetcher})];
   for(const [i,name]of ['hunem.meal_completed','hunem.soda_purchased',visitEvent].entries())await services[i].rpc('events/subscribe',{name,arguments:{},delivery:{mode:'webhook',url:'https://chatgpt.com/mcp-events/lifecycle-'+i,secret:'whsec_'+Buffer.alloc(32,8).toString('base64')},ttlMs:86400000},'owner',p.world.publicationWorldId);
   await Promise.all(services.map(s=>s.process(p)));assert.equal(sent.length,3,'all draw triggers fire before any real completion');
   const visitNotice=sent.find(e=>e.name===visitEvent);assert.equal(visitNotice.timestamp,new Date(at).toISOString());assert.ok(visitNotice.data.visitedAt>at,'legacy field carries the planned visit time; callback fields stay compatible');assert.equal(visitNotice.data.selectedAt,undefined);
@@ -55,7 +55,7 @@ test('real D1/R2: selection notifies once, art stages privately, completion alon
   assert.equal((await collections.claimCollection('meal',claims[0].id)).action,'busy','legacy claim cannot steal prepared work');
   const rgba=Buffer.alloc(128*128*4,255);rgba[3]=0;const bytes=png.PNG.sync.write({width:128,height:128,data:rgba});
   const review={tool:'image_gen.imagegen',actuallyCalled:true,subjectRecognizable:true,landmarkRecognizable:true,originalGeneratedPath:'synthetic-test-fixture-only'};
-  for(const [i,kind] of ['meal','soda','footprint'].entries())assert.equal(await BUCKET.get(`reference-photos/${kind==='meal'?'meal-v2':kind+'-v1'}/${claims[i].id}.json`),null,'direct native reference use must not require a saved photo');
+  for(const [i,kind] of ['meal','soda','footprint'].entries())assert.equal(await BUCKET.get(`reference-photos/${kind==='meal'?'meal-v2':kind+'-v1'}/${claims[i].id}.json`),null,'transport fixture does not populate R2; stored-reference tests verify the production gate');
   const saved=[await collections.saveCollection('meal',claims[0].id,claims[0].lease,bytes,review),await collections.saveCollection('soda',claims[1].id,claims[1].lease,bytes,review),await footprints.saveFootprint(claims[2].id,bytes,review,claims[2].lease)];
   for(const image of saved)assert.equal(image.publishedAt,null);
   assert.equal((await services[0].status(p)).selections[0].state,'private_ready');
