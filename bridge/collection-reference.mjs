@@ -3,6 +3,9 @@ import {referenceHandoffInstruction} from './reference-handoff-instruction.mjs';
 // Public visual reference candidates, delivered as native MCP image blocks.
 // Never fetch arbitrary item/source URLs or require a model-side downloader.
 const maxBytes=1024*1024;
+// Wikimedia requires descriptive client identification and an operator contact.
+// Workers do not supply Node's default User-Agent; local fetch success is insufficient.
+export const referenceUserAgent='HunEmTravelBot/1.6 (+https://hun-em-europe.rammus-shigoto.chatgpt.site/; visual reference preparation)';
 const fail=m=>{throw Error(m);};
 export function referenceUrl(value,host){
  const u=new URL(value),hosts=Array.isArray(host)?host:[host];if(u.protocol!=='https:'||!hosts.includes(u.hostname)||u.username||u.password||u.port)fail('REFERENCE_HOST_REJECTED');return u.href;
@@ -38,7 +41,7 @@ export async function collectionReference(row,{fetcher=fetch}={}){
  const u=new URL('https://commons.wikimedia.org/w/api.php');
  u.search=new URLSearchParams({action:'query',format:'json',formatversion:'2',generator:'search',gsrnamespace:'6',gsrlimit:'5',gsrsearch:row.name+' filetype:bitmap',prop:'imageinfo',iiprop:'url|mime|size|extmetadata',iiurlwidth:'640'});
  try{
-  const response=await fetcher(u,{redirect:'manual',signal:AbortSignal.timeout(6000),headers:{'User-Agent':'HunEmTravel/1.4 (public dish visual reference)'}});
+  const response=await fetcher(u,{redirect:'manual',signal:AbortSignal.timeout(6000),headers:{'User-Agent':referenceUserAgent}});
   const data=JSON.parse((await bodyBytes(response,{url:u.href,stage:'commons_api',failures:requestFailures})).toString('utf8'));if(data.error)fail('REFERENCE_SEARCH_FAILED');
   const candidates=(data.query?.pages||[]).filter(p=>words.every(w=>p.title?.normalize('NFKC').toLocaleLowerCase().includes(w))&&!/\b(?:logo|icon|map|drawing|illustration|recipe)\b/i.test(p.title)&&(!/vegan|vegetarian/i.test(p.title)||/vegan|vegetarian/i.test(row.name))).sort((a,b)=>(a.index||0)-(b.index||0));
   for(const page of candidates.slice(0,3)){
@@ -46,7 +49,7 @@ export async function collectionReference(row,{fetcher=fetch}={}){
    const info=page.imageinfo?.[0];if(!info||!['image/jpeg','image/png'].includes(info.mime)||info.width<120||info.height<120)continue;
    try{
     const sourcePage=referenceUrl(info.descriptionurl,'commons.wikimedia.org'),sourceImage=referenceUrl(info.thumburl||info.url,['upload.wikimedia.org','thumb.wikimedia.org']);
-    const r=await fetcher(sourceImage,{redirect:'manual',signal:AbortSignal.timeout(4000)}),bytes=await bodyBytes(r,{url:sourceImage,stage:'image',failures:requestFailures}),mimeType=referenceMime(bytes);
+    const r=await fetcher(sourceImage,{redirect:'manual',signal:AbortSignal.timeout(4000),headers:{'User-Agent':referenceUserAgent}}),bytes=await bodyBytes(r,{url:sourceImage,stage:'image',failures:requestFailures}),mimeType=referenceMime(bytes);
     photos.push({bytes,mimeType,title:page.title,sourcePage,sourceImage,credit:plain(info.extmetadata?.Artist?.value),license:plain(info.extmetadata?.LicenseShortName?.value)});
    }catch(e){errors.push(e.message);if(/^REFERENCE_HTTP_\d{3}$/.test(e.message))errors.push(e.message.replace('REFERENCE_HTTP_','REFERENCE_IMAGE_HTTP_'));}
   }

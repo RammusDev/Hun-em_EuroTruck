@@ -5,7 +5,8 @@ import {cacheSketchReference} from '../bridge/sketch-reference.mjs';
 import {mealReferenceCache} from '../bridge/meal-reference-cache.mjs';
 import {selectedSketches} from '../bridge/sketch-lifecycle.mjs';
 import {readPlatformReference} from '../bridge/mcp-file.mjs';
-import {footprintReference} from '../bridge/footprint-reference.mjs';
+import {footprintReference,footprintReferenceCache} from '../bridge/footprint-reference.mjs';
+import {referenceUserAgent} from '../bridge/collection-reference.mjs';
 import {collectionEventService} from '../bridge/collection-events.mjs';
 const jpeg=Buffer.from([255,216,255,224,0,1]);
 test('native reference handoff binds to exact selection and active lease, preserves photos through retries, never mutates world or publishes art',async()=>{
@@ -55,4 +56,17 @@ test('landmark reference preparation resolves exact article and reports HTTP403 
  assert.equal(new URL(apiFailure.requestFailures[0].url).searchParams.get('titles'),'Exact_Church');
  assert.equal(apiFailure.requestFailures[0].status,403);
  assert.equal((await footprintReference({source:'https://private.example/wiki/Church'},{fetcher:async()=>{throw Error('must not fetch');}})).errors[0],'REFERENCE_ARTICLE_REQUIRED');
+});
+
+test('landmark lookup identifies both API and image requests and retries old failed cache once',async()=>{
+ const objects=new Map(),bucket={get:async k=>objects.has(k)?{json:async()=>JSON.parse(objects.get(k))}:null,put:async(k,v)=>objects.set(k,v)};
+ const id='c'.repeat(32),row={id,name:'Exact Church',source:'https://de.wikipedia.org/wiki/Exact_Church'},key='reference-photos/footprint-v1/'+id+'.json';
+ await bucket.put(key,JSON.stringify({status:'failed',photos:[],errors:['REFERENCE_HTTP_403'],lookupVersion:'footprint-reference-v1',expiresAt:9999999,retryAt:9999999}));
+ let requests=0;const lookup=r=>footprintReference(r,{fetcher:async(url,init)=>{
+  requests++;assert.equal(init.headers['User-Agent'],referenceUserAgent);assert.match(referenceUserAgent,/Bot\/.*https:\/\/hun-em-europe\.rammus-shigoto\.chatgpt\.site/);
+  assert.equal(init.redirect,'manual');
+  return String(url).includes('/w/api.php')?Response.json({query:{pages:[{pageimage:'Church.jpg',thumbnail:{source:'https://thumb.wikimedia.org/church.jpg'}}]}}):new Response(jpeg);
+ }});
+ const cache=footprintReferenceCache({bucket,now:()=>1000,lookup});await cache.prepare(row);await cache.prepare(row);
+ assert.equal(requests,2,'old failure retried once; successful bytes reused without new download');assert.equal((await cache.read(id)).photos.length,1);
 });

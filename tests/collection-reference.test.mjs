@@ -1,10 +1,10 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {collectionReference,collectionReferenceResult,referenceUrl} from '../bridge/collection-reference.mjs';
+import {collectionReference,collectionReferenceResult,referenceUrl,referenceUserAgent} from '../bridge/collection-reference.mjs';
 import {pilotRpc} from '../bridge/mcp-pilot.mjs';
 const jpeg=Buffer.from([255,216,255,224,0,1]),row={kind:'meal',name:'testdish'};
 const page=(title='File:Testdish.jpg',url='https://upload.wikimedia.org/test.jpg')=>({title,index:1,imageinfo:[{mime:'image/jpeg',width:800,height:600,thumburl:url,descriptionurl:'https://commons.wikimedia.org/wiki/'+title,extmetadata:{Artist:{value:'<a>Photographer</a>'},LicenseShortName:{value:'CC BY-SA'}}}]});
 test('native references preserve provenance and image blocks without requiring a local file',async()=>{
- let calls=0;const r=await collectionReference(row,{fetcher:async(url,init)=>{calls++;assert.equal(init.redirect,'manual');return String(url).includes('/w/api.php')?Response.json({query:{pages:[page()]}}):new Response(jpeg);}});
+ let calls=0;const r=await collectionReference(row,{fetcher:async(url,init)=>{calls++;assert.equal(init.redirect,'manual');assert.equal(init.headers['User-Agent'],referenceUserAgent);return String(url).includes('/w/api.php')?Response.json({query:{pages:[page()]}}):new Response(jpeg);}});
  assert.equal(calls,2);assert.equal(r.photos.length,1);assert.equal(r.photos[0].credit,'Photographer');
  const result=collectionReferenceResult({items:[row]},r);assert.equal(result.content[1].type,'image');assert.equal(result.content[1].data,jpeg.toString('base64'));
  const metadata=JSON.parse(result.content[0].text);assert.equal(metadata.referencePhotos[0].sourcePage,'https://commons.wikimedia.org/wiki/File:Testdish.jpg');assert.equal(metadata.referencePhotos[0].bytes,undefined);assert.match(metadata.referenceInstruction,/num_last_images_to_include/);

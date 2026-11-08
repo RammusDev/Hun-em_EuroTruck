@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {collectionReference,referenceMime,safeReferenceFailures} from './collection-reference.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const ttl=7*86400000;
-const defaultLookupVersion='meal-reference-v3-official-arancini';
+const defaultLookupVersion='meal-reference-v4-identified-client';
 // Never expose arbitrary upstream exception text, URLs or response bodies.
 const safeErrors=errors=>[...new Set((Array.isArray(errors)?errors:[]).map(e=>/^REFERENCE_[A-Z0-9_]{1,80}$/.test(e)?e:/timeout|abort/i.test(String(e))?'REFERENCE_TIMEOUT':'REFERENCE_FETCH_FAILED'))].slice(0,8);
 const boundedLookup=row=>{const deadline=AbortSignal.timeout(8000);return collectionReference(row,{fetcher:(url,init)=>fetch(url,{...init,signal:AbortSignal.any([deadline,init.signal].filter(Boolean))})});};
