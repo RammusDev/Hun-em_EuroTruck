@@ -8,12 +8,12 @@ import {readerImageResponse} from '../bridge/reader-image.mjs';
 import {createSnapshotTextCache} from '../bridge/snapshot-cache.mjs';
 const image=()=>{const width=1024,data=Buffer.alloc(width*width*4);let r=123;for(let i=0;i<data.length;i+=4){r=(Math.imul(r,1664525)+1013904223)>>>0;data[i]=r&255;data[i+1]=(r>>>8)&255;data[i+2]=(r>>>16)&255;data[i+3]=255;}return png.PNG.sync.write({width,height:width,data});};
 const object=(bytes,etag='fixture-1')=>({httpEtag:etag,body:new ReadableStream({start(c){c.enqueue(new Uint8Array(bytes));c.close();}}),arrayBuffer:async()=>bytes});
-test('book requests return a small 512px JPEG; original pixels and URL remain unchanged',async()=>{
+test('book requests return a small 384px JPEG; original pixels and URL remain unchanged',async()=>{
  const bytes=image(),key='generated/fixture/original.png';
  const res=await readerImageResponse(new Request('https://test/'+key+'?view=book'),object(bytes),key);
  const preview=Buffer.from(await res.arrayBuffer()),decoded=jpeg.decode(preview);
- assert.equal(res.headers.get('content-type'),'image/jpeg');assert.equal(decoded.width,512);assert.equal(decoded.height,512);
- assert.ok(preview.length<bytes.length/4);assert.ok(preview.length<=160*1024);
+ assert.equal(res.headers.get('content-type'),'image/jpeg');assert.equal(decoded.width,384);assert.equal(decoded.height,384);
+ assert.ok(preview.length<bytes.length/4);assert.ok(preview.length<=64*1024);
  const original=await readerImageResponse(new Request('https://test/'+key),object(bytes),key);
  assert.deepEqual(Buffer.from(await original.arrayBuffer()),bytes);assert.equal(original.headers.get('content-type'),'image/png');
  assert.notEqual(res.headers.get('etag'),original.headers.get('etag'));assert.equal(res.headers.get('cache-control'),'private, no-cache');assert.equal(res.headers.get('vary'),'Cookie');

@@ -39,19 +39,3 @@ body.footprints-open{overflow:hidden;}
 
 /* Position artwork is decorative; scenery underneath remains clickable. */
 .cat-marker,.cat-marker img{pointer-events:none!important;}
-
-/* Four cards per page, with a separate native locality line on every card. */
-.footprints-list.album-book{grid-template-columns:repeat(2,minmax(0,1fr));}
-.footprint-card.album-page{padding:16px 22px 20px;}
-.footprint-card h3{font-size:18px;line-height:1.45;margin-bottom:4px;}
-.footprint-card .footprint-locality{margin:0 0 10px;color:#78664a;font-size:12px;line-height:1.6;overflow-wrap:anywhere;}
-.footprint-card img{max-height:190px;}
-@media(max-width:700px){
- .footprints-list.album-book{grid-template-columns:repeat(2,minmax(0,1fr));margin:0 8px 8px;padding:6px;}
- .footprint-card.album-page{padding:12px 9px 16px;}
- .footprint-card h3{font-size:14px;}
- .footprint-card .footprint-locality{font-size:10px;}
- .footprint-card img{max-height:140px;}
- .footprint-card p,.footprint-card details,.footprint-card time{font-size:11px;}
- .footprint-pending{min-height:110px;font-size:11px;padding:8px;}
-}

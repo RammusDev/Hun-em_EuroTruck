@@ -5,7 +5,7 @@
  let mapVisible=true;try{mapVisible=localStorage.getItem(visibilityKey)!=='false';}catch{}
  function updateToggle(){if(!mapToggle)return;mapToggle.textContent=mapVisible?'隱藏景點':'顯示景點';mapToggle.setAttribute('aria-pressed',String(mapVisible));}
  updateToggle();
- const perPage=()=>4,bookCache=new Map();
+ const mobile=matchMedia('(max-width:700px)'),perPage=()=>mobile.matches?1:2,bookCache=new Map();
  let listController,clusterArea=null;
  let map,googleMode=false,markers=new Map(),timer,lastRefresh=0,page=0,selected=null,listRequest=0,mapRequest=0,mapController,opener;
  let mapFlight=null,mapQueued=false,appliedMapKey=null;
@@ -32,6 +32,7 @@
  document.getElementById('open-footprints').onclick=e=>open(null,e.currentTarget);
  document.getElementById('close-footprints').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{document.body.classList.remove('footprints-open');listRequest++;listController?.abort();list.replaceChildren();opener?.focus();});
  prev.onclick=()=>{if(page>0){page--;drawList();}};next.onclick=()=>{if(!next.disabled){page++;drawList();}};
+ mobile.addEventListener('change',()=>{page=0;if(dialog.open)drawList();});
  function turn(direction){if(direction<0){if(!prev.disabled)prev.onclick();}else if(!next.disabled)next.onclick();}
  dialog.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();turn(event.key==='ArrowLeft'?-1:1);}});
  let touch=null;list.addEventListener('touchstart',event=>{if(event.target.closest('a,button,details'))return;touch={x:event.changedTouches[0].clientX,y:event.changedTouches[0].clientY};},{passive:true});

@@ -3,8 +3,8 @@ import {makeReferencePreview,previewPolicy} from './reference-preview.mjs';
 
 // Display derivatives are disposable process memory, never world/R2 writes.
 // Call only AFTER the route's current reader and publication checks.
-const displayCache=new Map(),displayPolicy={...previewPolicy,version:'book-512-q78-55-v1'};
-function displayBytes(bytes){try{return makeReferencePreview(bytes,displayPolicy).bytes;}catch(error){if(error.message!=='REFERENCE_PREVIEW_TOO_LARGE')throw error;return makeReferencePreview(bytes,{...displayPolicy,quality:55}).bytes;}}
+const displayCache=new Map(),displayPolicy={...previewPolicy,version:'book-384-q60-42-v2',maxEdge:384,quality:60,maxBytes:64*1024};
+function displayBytes(bytes){try{return makeReferencePreview(bytes,displayPolicy).bytes;}catch(error){if(error.message!=='REFERENCE_PREVIEW_TOO_LARGE')throw error;return makeReferencePreview(bytes,{...displayPolicy,quality:42}).bytes;}}
 const trim=()=>{while(displayCache.size>16)displayCache.delete(displayCache.keys().next().value);};
 const matches=(header,etag)=>header?.split(',').some(value=>value.trim().replace(/^W\//,'')===etag.replace(/^W\//,''));
 export async function readerImageResponse(req,object,key){

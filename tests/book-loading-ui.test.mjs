@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 test('shared notebook preparation never waits for an image decoder or starts a timer',()=>{
  const window={},image={decode(){throw Error('must not block on decoding');}},node={querySelectorAll:()=>[image]};
  vm.runInNewContext(fs.readFileSync(new URL('../public/dialog-paging.js',import.meta.url),'utf8'),{window});
- assert.equal(window.HunemDialogPaging.prepare([node]),undefined);assert.equal(image.loading,'eager');assert.equal(image.decoding,'async');
+ assert.equal(window.HunemDialogPaging.prepare([node]),undefined);assert.equal(image.loading,'lazy');assert.equal(image.decoding,'async');
  assert.equal(window.HunemDialogPaging.source('/generated/day/art.png'),'/generated/day/art.png?view=book');
  assert.equal(window.HunemDialogPaging.source('/footprints/id/hash.jpg'),'/footprints/id/hash.jpg');
  assert.equal(window.HunemDialogPaging.source('https://example.org/art.png'),'https://example.org/art.png');

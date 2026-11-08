@@ -15,7 +15,7 @@
   }
   updateNavigation();
  };
- const duration=()=>matchMedia('(prefers-reduced-motion:reduce)').matches?1:1150;
+ const duration=()=>matchMedia('(prefers-reduced-motion:reduce)').matches?1:mobile.matches?180:450;
  const cover=()=>{const el=document.createElement('div');el.className='album-cover';el.setAttribute('aria-hidden','true');el.innerHTML='<span>HUN-EM</span><strong>旅途速寫</strong><small>A CAT’S EUROPE</small><i>✧</i>';book.append(el);return el;};
  const animate=async(el,frames,ms=duration())=>{try{await el.animate(frames,{duration:ms,easing:'cubic-bezier(.22,.55,.2,1)',fill:'forwards'}).finished;}catch{}};
  const turn=async direction=>{

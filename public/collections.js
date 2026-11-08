@@ -3,7 +3,7 @@
  const list=$('collections-list'),status=$('collections-status'),prev=$('collections-prev'),next=$('collections-next');
  const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
  const fmt=new Intl.DateTimeFormat('zh-TW',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
- const mobile=matchMedia('(max-width:700px)'),perPage=()=>kind==='soda'?4:mobile.matches?1:2;
+ const mobile=matchMedia('(max-width:700px)'),perPage=()=>mobile.matches?1:2;
  const cache=new Map();let total=0;
  let kind='meal',page=0,opener,request=0,controller,lastSummary=0,summaryPending=false,heldKey;
  let citiesInput,cityNames=new Map();
