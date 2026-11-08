@@ -49,3 +49,16 @@ test('new lookup version retries old failed caches once while keeping successful
  await bucket.put(key,JSON.stringify({at:1000,expiresAt:999999,retryAt:99999,status:'ready',photos:[{...photo,data:jpeg.toString('base64'),sha256:digest(jpeg)}]}));
  await cache.prepare({id,name:'Arancini'});assert.equal(calls,1);assert.equal((await cache.read(id)).photos.length,1);
 });
+
+test('403 URL and stage persist in R2 cache and audit and pure native read, without credentials',async()=>{
+ const bucket=fake(),url='https://de.wikipedia.org/w/api.php?action=query&titles=Lenn%C3%A9park&token=hidden#secret';
+ const cache=mealReferenceCache({bucket,kind:'footprint',now:()=>1000,lookup:async()=>({photos:[],errors:['REFERENCE_HTTP_403'],requestFailures:[{status:403,stage:'wikipedia_api',url},{status:403,stage:'image',url:'https://user:password@example.test/a'}]})});
+ await cache.prepare({id,name:'Lennépark'});
+ const saved=await cache.read(id),expected=[{status:403,stage:'wikipedia_api',url:'https://de.wikipedia.org/w/api.php?action=query&titles=Lenn%C3%A9park'}];
+ assert.deepEqual(saved.requestFailures,expected);
+ assert.deepEqual(JSON.parse(bucket.objects.get('reference-audit/footprint/'+id+'.json')).requestFailures,expected);
+ const {collectionReferenceResult}=await import('../bridge/collection-reference.mjs');
+ assert.deepEqual(JSON.parse(collectionReferenceResult({items:[]},saved).content[0].text).referenceRequestFailures,expected);
+ const before=Buffer.from(bucket.objects.get('reference-photos/footprint-v1/'+id+'.json'));
+ await cache.read(id);assert.deepEqual(bucket.objects.get('reference-photos/footprint-v1/'+id+'.json'),before);
+});

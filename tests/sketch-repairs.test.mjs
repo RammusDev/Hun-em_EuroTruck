@@ -16,4 +16,9 @@ test('server retrieves reviewed photos under original size, redirect and host bo
  calls=0;const partial=await reviewedSketchReference(sources,{fetcher:async()=>++calls===1?new Response(jpeg):new Response(null,{status:403})});assert.deepEqual(partial.photos,[]);assert.deepEqual(partial.errors,['REFERENCE_HTTP_403']);
  const rejected=await reviewedSketchReference([{...sources[0],sourceImage:'https://private.example/image'}],{fetcher:()=>{throw Error('must not fetch');}});assert.deepEqual(rejected.errors,['REFERENCE_HOST_REJECTED']);
  const church=reviewedReferenceSources('footprint',{id:'fd11c7e1b0829a05f012c61885853af7',worldId:recoveryWorld,name:'Friedenskirche'});assert.equal(church[0].referenceRole,'exact-landmark');
+ const parkRow={id:'ded7b75f1bf0ef7c3df5e6006b92b808',worldId:recoveryWorld,name:'Lennépark'},park=reviewedReferenceSources('footprint',parkRow);
+ assert.equal(reviewedReferenceSources('footprint',{...parkRow,worldId:'other'}),null);
+ assert.equal(reviewedReferenceSources('footprint',{...parkRow,id:'a'.repeat(32)}),null);
+ const parkFailure=await reviewedSketchReference(park,{fetcher:async()=>new Response(null,{status:403})});
+ assert.deepEqual(parkFailure.requestFailures,[{status:403,stage:'image',url:park[0].sourceImage}]);
 });

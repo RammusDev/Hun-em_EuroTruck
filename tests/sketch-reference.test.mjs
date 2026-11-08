@@ -49,5 +49,10 @@ test('landmark reference preparation resolves exact article and reports HTTP403 
  let calls=0;
  const r=await footprintReference({name:'Church',source:'https://it.wikipedia.org/wiki/Exact_Church'},{fetcher:async url=>{calls++;if(calls===1){assert.equal(new URL(url).searchParams.get('titles'),'Exact_Church');return Response.json({query:{pages:[{pageimage:'Church.jpg',thumbnail:{source:'https://upload.wikimedia.org/church.jpg'}}]}});}return new Response(null,{status:403});}});
  assert.deepEqual(r.errors,['REFERENCE_HTTP_403']);assert.equal(calls,2);
+ assert.deepEqual(r.requestFailures,[{status:403,stage:'image',url:'https://upload.wikimedia.org/church.jpg'}]);
+ const apiFailure=await footprintReference({name:'Church',source:'https://it.wikipedia.org/wiki/Exact_Church'},{fetcher:async()=>new Response(null,{status:403})});
+ assert.equal(apiFailure.requestFailures[0].stage,'wikipedia_api');
+ assert.equal(new URL(apiFailure.requestFailures[0].url).searchParams.get('titles'),'Exact_Church');
+ assert.equal(apiFailure.requestFailures[0].status,403);
  assert.equal((await footprintReference({source:'https://private.example/wiki/Church'},{fetcher:async()=>{throw Error('must not fetch');}})).errors[0],'REFERENCE_ARTICLE_REQUIRED');
 });

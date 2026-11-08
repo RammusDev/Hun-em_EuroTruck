@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {collectionReference,referenceMime} from './collection-reference.mjs';
+import {collectionReference,referenceMime,safeReferenceFailures} from './collection-reference.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const ttl=7*86400000;
 const defaultLookupVersion='meal-reference-v3-official-arancini';
@@ -17,13 +17,13 @@ export function mealReferenceCache({bucket,lookup=boundedLookup,now=Date.now,kin
  const reusable=c=>usable(c)||c?.expiresAt>now()&&!c.photos?.length&&c.lookupVersion===lookupVersion&&c.retryAt>now();
  async function read(id){
   let c;try{c=await readJson(key(id));}catch{}
-  if(!c||!c.photos?.length)return {photos:[],errors:c?.status==='failed'?['REFERENCE_PREPARATION_FAILED',...safeErrors(c.errors)]:['REFERENCE_NOT_PREPARED'],preparedAt:c?.at||null};
+  if(!c||!c.photos?.length)return {photos:[],errors:c?.status==='failed'?['REFERENCE_PREPARATION_FAILED',...safeErrors(c.errors)]:['REFERENCE_NOT_PREPARED'],requestFailures:safeReferenceFailures(c?.requestFailures),preparedAt:c?.at||null};
   try{const photos=c.photos.map(({data,...p})=>({...p,bytes:Buffer.from(data,'base64')}));if(!photos.every(p=>p.bytes.length<=1024*1024&&referenceMime(p.bytes)===p.mimeType&&hash(p.bytes)===p.sha256))throw Error();return {photos,errors:[],preparedAt:c.at};}catch{return {photos:[],errors:['REFERENCE_CACHE_INVALID']};}
  }
  async function prepare(row){
   const old=await readJson(key(row.id));if(reusable(old))return;
   const r=await lookup(row),at=now(),photos=r.photos.map(({bytes,...p})=>({...p,sha256:hash(bytes),data:Buffer.from(bytes).toString('base64')}));
-  const record={id:row.id,name:row.name,at,expiresAt:at+ttl,retryAt:at+5*60000,status:photos.length?'ready':'failed',photos,errors:r.errors,lookupVersion};
+  const record={id:row.id,name:row.name,at,expiresAt:at+ttl,retryAt:at+5*60000,status:photos.length?'ready':'failed',photos,errors:r.errors,requestFailures:safeReferenceFailures(r.requestFailures),lookupVersion};
   await bucket.put(key(row.id),JSON.stringify(record),{httpMetadata:{contentType:'application/json'}});
   await bucket.put(audit(row.id),JSON.stringify({...record,photos:photos.map(({data,...p})=>p)}),{httpMetadata:{contentType:'application/json'}});
  }

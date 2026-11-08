@@ -19,7 +19,7 @@ export async function ensureSketchReference({bucket,kind,row,now=Date.now()}){
 export async function readSketchReference({bucket,kind,id}){
  if(!sketchKinds.includes(kind)||!/^[a-f0-9]{32}$/.test(id))throw Error('INVALID_SKETCH');
  const refs=await sketchReferenceCache({bucket,kind}).read(id);
- return {content:[{type:'text',text:JSON.stringify({action:refs.photos.length?'reference_ready':'reference_pending',kind,id,errors:refs.errors,references:refs.photos.map(({bytes,...photo})=>photo)})},...refs.photos.map(p=>({type:'image',mimeType:p.mimeType,data:Buffer.from(p.bytes).toString('base64')}))],isError:false};
+ return {content:[{type:'text',text:JSON.stringify({action:refs.photos.length?'reference_ready':'reference_pending',kind,id,errors:refs.errors,referenceRequestFailures:refs.requestFailures||[],references:refs.photos.map(({bytes,...photo})=>photo)})},...refs.photos.map(p=>({type:'image',mimeType:p.mimeType,data:Buffer.from(p.bytes).toString('base64')}))],isError:false};
 }
 export async function queueSketchWork({db,bucket,kind,row,now=Date.now(),prepareReference=ensureSketchReference}){
  const key=sketchClaimKey(kind,row.id);

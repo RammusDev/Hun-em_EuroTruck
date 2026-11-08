@@ -12,6 +12,7 @@ export function repairSketchSubject(row,kind,worldId){
 const churchPage='https://www.altekirchen.de/offene-kirchen/kirchen/friedenskirche-frankfurt-oder';
 export function reviewedReferenceSources(kind,row){
  if(row.worldId!==recoveryWorld)return null;
+ if(kind==='footprint'&&row.id==='ded7b75f1bf0ef7c3df5e6006b92b808')return [{title:row.name,sourcePage:'https://de.wikipedia.org/wiki/Lenn%C3%A9park_Frankfurt_(Oder)',sourceImage:'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d7/Lennepark_Frankfurt_Oder_002.jpg/960px-Lennepark_Frankfurt_Oder_002.jpg?utm_source=de.wikipedia.org&utm_campaign=api&utm_content=thumbnail',credit:'Lennepark_Frankfurt_Oder_002.jpg; see Wikipedia source photograph',license:'See source photograph license; temporary appearance reference only',referenceRole:'exact-landmark'}];
  if(kind==='footprint'&&row.id==='fd11c7e1b0829a05f012c61885853af7')return [{title:row.name,sourcePage:churchPage,sourceImage:'https://www.altekirchen.de/wp-content/uploads/2019/02/Frankfurt-O-Friedenskirche-830x1024.jpg',credit:'Förderkreis Alte Kirchen Berlin-Brandenburg e.V.; see source page',license:'Published church photograph; temporary visual reference only',referenceRole:'exact-landmark'}];
  if(kind==='meal'&&row.id===recoveryMealId&&row.subjectCorrection)return [
   {title:'Cooked salmon fillet appearance only',sourcePage:'https://www.essen-und-trinken.de/rezepte/59477-rzpt-lachs-mit-paprikagemuese',sourceImage:'https://image.essen-und-trinken.de/11831140/t/Ki/v9/w480/r1/-/lachs-mit-paprikagemuese-d85f5fc578fe311ce9f3c4660b391a61-fjt2014070621-jpg--8166-.jpg',credit:'Matthias Haupt / ESSEN & TRINKEN',license:'Copyright; temporary component appearance reference only',referenceRole:'cooked-salmon-component-only'},
@@ -19,12 +20,12 @@ export function reviewedReferenceSources(kind,row){
  return null;
 }
 export async function reviewedSketchReference(sources,{fetcher=fetch}={}){
- const photos=[],errors=[],deadline=AbortSignal.timeout(8000),hosts=['www.altekirchen.de','www.essen-und-trinken.de','image.essen-und-trinken.de','www.zait.de'];
+ const photos=[],errors=[],requestFailures=[],deadline=AbortSignal.timeout(8000),hosts=['www.altekirchen.de','www.essen-und-trinken.de','image.essen-und-trinken.de','www.zait.de','de.wikipedia.org','thumb.wikimedia.org'];
  for(const source of sources)try{
   referenceUrl(source.sourcePage,hosts);const url=referenceUrl(source.sourceImage,hosts);
   const response=await fetcher(url,{redirect:'manual',headers:{'User-Agent':'HunEmTravel/1.5 (owner-reviewed appearance reference)'},signal:deadline});
-  const bytes=await bodyBytes(response);photos.push({...source,bytes,mimeType:referenceMime(bytes)});
+  const bytes=await bodyBytes(response,{url,stage:'image',failures:requestFailures});photos.push({...source,bytes,mimeType:referenceMime(bytes)});
  }catch(e){errors.push(/^REFERENCE_[A-Z0-9_]+$/.test(e.message)?e.message:'REFERENCE_FETCH_FAILED');}
  // Component assembly needs every explicitly listed component, never a partial plate.
- return photos.length===sources.length?{photos,errors}:{photos:[],errors};
+ return photos.length===sources.length?{photos,errors,requestFailures}:{photos:[],errors,requestFailures};
 }

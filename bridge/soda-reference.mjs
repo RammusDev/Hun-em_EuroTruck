@@ -14,13 +14,13 @@ export function reviewedSodaPhoto(row,bytes){
 }
 export async function sodaReference(row,{fetcher=fetch}={}){
  const p=sodaPackageReference(row);if(!p)return {photos:[],errors:['REFERENCE_PACKAGE_NOT_REVIEWED']};
- const errors=[],deadline=AbortSignal.timeout(8000);
+ const errors=[],requestFailures=[],deadline=AbortSignal.timeout(8000);
  for(const source of sodaPhotoSources(p))try{
   const url=referenceUrl(source.sourceImage,catalog.allowedImageHosts);referenceUrl(source.sourcePage,catalog.allowedPageHosts);
-  const r=await fetcher(url,{redirect:'manual',headers:{'User-Agent':'HunEmTravel/1.4 (official soda package visual reference)','Accept':'image/png,image/jpeg,image/webp'},signal:AbortSignal.any([deadline,AbortSignal.timeout(6000)])}),bytes=await bodyBytes(r),mimeType=referenceMime(bytes);
+  const r=await fetcher(url,{redirect:'manual',headers:{'User-Agent':'HunEmTravel/1.4 (official soda package visual reference)','Accept':'image/png,image/jpeg,image/webp'},signal:AbortSignal.any([deadline,AbortSignal.timeout(6000)])}),bytes=await bodyBytes(r,{url,stage:'image',failures:requestFailures}),mimeType=referenceMime(bytes);
   if(source.sha256&&createHash('sha256').update(bytes).digest('hex')!==source.sha256)throw Error('REFERENCE_SOURCE_CHANGED');
   return {photos:[{bytes,mimeType,title:source.title||p.title||p.id,sourcePage:source.sourcePage,sourceImage:source.sourceImage,credit:source.credit||p.credit,license:source.license||p.license,packageKind:p.packageKind,sizeMl:p.sizeMl||null,packageSelector:source.packageSelector||p.packageSelector||null,referenceRole:'catalog-illustration-package',checkedOn:source.checkedOn||p.checkedOn}],errors};
  }catch(e){errors.push(/^REFERENCE_[A-Z0-9_]+$/.test(e.message)?e.message:/timeout|abort/i.test(e.message)?'REFERENCE_TIMEOUT':'REFERENCE_FETCH_FAILED');if(deadline.aborted)break;}
- return {photos:[],errors:[...new Set(errors)]};
+ return {photos:[],errors:[...new Set(errors)],requestFailures};
 }
 export const sodaReferenceCache=options=>mealReferenceCache({...options,kind:'soda',lookup:options.lookup||sodaReference,lookupVersion:catalog.version});
