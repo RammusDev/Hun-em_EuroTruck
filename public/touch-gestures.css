@@ -1,0 +1,9 @@
+/* Allow normal page scrolling, but reserve pinch gestures for map code.
+   Applying this to both roots also covers scrolling dialogs and short pages. */
+html, body { touch-action: pan-x pan-y; }
+
+/* Prevent Safari from zooming the page when focusing small form controls. */
+@media (hover: none) and (pointer: coarse) {
+ input:not([type=checkbox]):not([type=radio]):not([type=range]),
+ select, textarea { font-size: max(16px, 1em); }
+}
